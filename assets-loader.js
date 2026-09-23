@@ -18,13 +18,14 @@ function requestAsset(img){
 function sceneAssets(){
  const list=[atlas,forest,evolutionArt,frogSheets[frogArmorLevel()]];
  const items=[...state.items,...state.loot];if(state.chestReward)items.push(state.chestReward);
-  const effects={axe:weaponFrames,shuriken:shurikenFx,blade:weaponFrames,storm:weaponFrames,wand:beamFrames,bow:seedBolts,spear:spearThrust,bomb:newAttackFrames,hammer:hammerFx,scythe:scytheFx,orb:orbFx,dagger:daggerFx,tome:tomeFx};
+  const effects={axe:axe12Fx,shuriken:shurikenFx,blade:weaponFrames,storm:stormHitFx,wand:beamFrames,bow:seedBolts,spear:spearThrust,bomb:newAttackFrames,hammer:hammerFx,scythe:scythe12Fx,orb:orbFx,dagger:daggerFx};
   for(const item of items){
   if(['bow','spear','bomb','armor','boots'].includes(item.type))list.push(equipmentArt);
   if(GLYPH_WEAPONS.has(item.type))list.push(glyphWeaponsArt);
   if(effects[item.type])list.push(effects[item.type]);
   if(item.type==='scythe')list.push(scythe12Fx);
   if(item.type==='thunder_halberd')list.push(thunderHalberdFx);
+  if(item.type==='frost_scepter')list.push(legendFx.glacial_estoc);
   if(typeof legendFx!=='undefined'){
     if(legendFx[item.type])list.push(legendFx[item.type]);
     const profile=typeof PackAttackFx!=='undefined'?PackAttackFx.resolve(item.type):null;

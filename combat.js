@@ -3,8 +3,10 @@ const battleHero = new Image(); // Retained only for legacy fallback code; not d
 const RUN_SPEED = 52;
 const LEG_DISTANCE = 100;
 const MELEE_SLOTS = 3;
+const ENEMY_PACE = 1.5;
 // The swing's strike frames; the recovery tail of the .78s pose can be cancelled by the next attack.
-const ATTACK_LOCK = .45;
+const ATTACK_LOCK = .22;
+const HERO_ATTACK_DURATION = .5;
 // Kill chain: every kill refills the window; FRENZY_AT kills in one chain reset all cooldowns.
 const COMBO_WINDOW = 2.2;
 const FRENZY_AT = 8;
@@ -18,6 +20,8 @@ const BLIGHT_TIME = 3;
 const BOSS_FIRST_SIG = 3.2, BOSS_SIG_GAP = 6.5, BOSS_WINDUP = 1.8;
 const STAGGER_SHARE = .09, STAGGER_TIME = 2.4, STAGGER_VULN = 1.3, BURST_STAGGER = 2;
 const SLAM_POWER = 2.2, MEND_SHARE = .1;
+// A pack that is allowed to chew kills. The first bite is a warning; each extra bite from the same foe hits harder.
+const CONTACT_MUL = 1.32, BITE_STEP = .32, BITE_CAP = 2.15, ATTACK_GAP = .9, CHARGE_GAP = .68;
 const BOSS_PHASES = [.66, .33];
 const SIG_LABEL = { slam: 'SMASH', brood: 'BROOD', mend: 'MEND' };
 function registerKill(enemy){
@@ -228,10 +232,11 @@ function startEncounter() {
     const boss = state.bossSpawned && i === state.waveTotal - 1;
     spawnEnemy(boss);
     const e = state.enemies.at(-1);
-    e.x = W * (.74 + i * .085); e.y = groundY() - H * .01 + (i % 3 - 1) * 5;
+    const near=Math.min(.74,.42+(level.number-1)*.028);
+    e.x = W * ((boss ? 1.04 : near) + i * .05); e.y = groundY() - H * .01 + (i % 3 - 1) * 5;
     e.elite=!boss&&i<level.elites;
     e.size=boss?58:e.elite?27:20;
-    e.speed = Math.max(36, W * .105) * (boss ? .65 : 1) * level.speedScale;
+    e.speed = Math.max(42, W * .12) * (boss ? .65 : 1) * level.speedScale;
     const introduced=ENEMY_UNLOCKS[state.wave];
     e.kind=boss?level.bossKind:(introduced&&i<introduced.length?introduced[i]:level.pool.length?level.pool[(state.wave+i)%level.pool.length]:null);
     const kind=ENEMY_KINDS[e.kind];
@@ -271,11 +276,11 @@ function encounterHpMul(){
 function spawnEncounterEnemy(entry,level=levelInfo()){
   spawnEnemy(!!entry.boss);const e=state.enemies.at(-1),kind=ENEMY_KINDS[entry.kind];
   Object.assign(e,{kind:entry.kind,boss:!!entry.boss,elite:!!entry.elite,
-    x:W*((state.encounterTime<.1?.8:1.01)+(entry.lane||0)*.075),y:H*.78+((entry.lane||0)%3-1)*5,
+    x:W*((entry.boss?1.06:(state.encounterTime<.1?Math.min(.7,.46+(level.number-1)*.012):1.01))+(entry.lane||0)*.05),y:H*.78+((entry.lane||0)%3-1)*5,
     size:entry.boss?58:entry.elite?27:20,age:0,attack:.5,damageScale:level.damageScale,barrier:kind?.barrier||0});
   const mul=encounterHpMul();
   e.hp=e.maxHp=Math.round((entry.boss?level.bossHealth:Math.round(level.health*(kind?.hp||1)*(entry.elite?1.35:1)))*mul);
-  e.baseY=e.y;e.speed=W*.105*(entry.boss?.8:1)*(entry.boss?Math.max(.9,kind?.speed||1):(kind?.speed||1))*level.speedScale;
+  e.baseY=e.y;e.speed=W*.12*(entry.boss?.8:1)*(entry.boss?Math.max(.9,kind?.speed||1):(kind?.speed||1))*level.speedScale;
   if(entry.boss)armBoss(e);
   assignEnemyAspect(e, entry.lane || 0);
   return e;
@@ -302,7 +307,7 @@ function clearEncounter() {
   announce(finale?'VICTORY!':'✓'); beep(660, .16); setTimeout(() => beep(880, .2), 100);
 }
 function wield(item) {
-  state.heldId = item.id; state.handFlash = .78; state.attackLock = ATTACK_LOCK;
+  state.heldId = item.id; state.handFlash = HERO_ATTACK_DURATION; state.attackLock = ATTACK_LOCK;
 }
 function attackChoices(){
   const best=new Map();
@@ -346,8 +351,30 @@ function leaveChest(){
 // Role tuning: every role must keep ~equal damage per mana on its best target set.
 const CHAIN_FALLOFF=[1.25,.9,.8,.7,.6,.5];
 const DOT_BONUS=1.1,PULL_DAMAGE=.85,PULL_REACH=1.8,PULL_STRENGTH=.35,PULL_SLOW=1.2;
+function temperMul(src, enemy) {
+  const t = src?.temper;
+  if (t === 'focus' && state.focus) return 1.25;
+  if (t === 'pack' && state.enemies.filter(e => e.hp > 0).length >= 4) return 1.22;
+  if (t === 'boss' && (enemy.elite || enemy.boss)) return 1.2;
+  return 1;
+}
 function strike(enemy,dmg,color,src){
-  hit(enemy,(enemy.elite||enemy.boss)&&src?.eliteMul?dmg*src.eliteMul:dmg,color,src?.aspect,src?.srcRole);
+  let dealt=dmg*temperMul(src,enemy);
+  if((enemy.elite||enemy.boss)&&src?.eliteMul)dealt*=src.eliteMul;
+  hit(enemy,dealt,color,src?.aspect,src?.srcRole,src?.temper);
+  impactFeedback(src);
+}
+// One crisp contact per cast, not a stop on every DOT tick or chain victim.
+function impactFeedback(src){
+  if(!src||src.feltImpact)return;
+  src.feltImpact=true;
+  if(state.impactCooldown>0)return;
+  state.impactCooldown=.12;
+  const heavy=src.srcRole==='burst'||src.kind==='clockwork_trap'||src.type==='bomb';
+  state.hitstop=Math.max(state.hitstop||0,heavy?.045:.025);
+  state.shake=Math.max(state.shake||0,heavy?6:3.5);
+  buzz(heavy?14:7);
+  beep(heavy?110:260,heavy?.07:.045,'triangle',.022);
 }
 function attackProfile(type) {
   return (typeof PackAttackFx !== 'undefined' && PackAttackFx.resolve)
@@ -380,7 +407,7 @@ function weaponAttack(item) {
   const eliteMul = syn.eliteMul * (d.role === 'burst' ? PackCore.BURST_ELITE : 1);
   const fxFrom = state.effects.length, shotFrom = state.projectiles.length;
   const targets = [target, ...pool.filter(e => e !== target)];
-  const x = W * .27 + 20, y = groundY() - 30;
+  const x=W*.27+128*castScale()*.295,y=groundY()-128*castScale()*.48;
   const profile = attackProfile(item.type);
   const mode = profile?.mode || 'projectile';
 
@@ -396,7 +423,7 @@ function weaponAttack(item) {
     chain.forEach((enemy, i) => {
       state.arcs.push({x:fromX,y:fromY,ex:enemy.x,ey:enemy.y-enemy.size,life:.32,color:d.color,level});
       state.effects.push({kind:'lightning',x:enemy.x,level,age:0,life:.9});
-      strike(enemy, Math.round(dmg * itemShots(item) * CHAIN_FALLOFF[i]), d.color, {aspect:d.aspect,eliteMul});
+      strike(enemy, Math.round(dmg * itemShots(item) * CHAIN_FALLOFF[i]), d.color, {aspect:d.aspect,eliteMul,temper:item.temper});
       fromX = enemy.x; fromY = enemy.y - enemy.size;
     });
     if (level===4) state.effects.push({kind:'thunderfield',x:target.x,level,age:0,life:1.1,nextTick:.4,remaining:2,damage:Math.round(dmg*.18),radius:W*.55,aspect:d.aspect});
@@ -450,34 +477,45 @@ function weaponAttack(item) {
     const ticks = (level < 3 ? 1 : level === 3 ? 2 : 3) * (dot ? 2 : 1), tickGap = dot ? .3 : .18;
     const radius = kind === 'generic_bolt' ? [32,48,70,96][level-1] : [36,55,78,105][level-1];
     const total = dmg * itemShots(item) * burst * (dot ? DOT_BONUS : role === 'pull' ? PULL_DAMAGE : 1);
-    const fx={kind,x:target.x,fromX:x+36,target,level,age:0,life:.85+ticks*(dot?tickGap:.14),
+    const fx={kind,x:target.x,fromX:x,fromY:y,target,level,age:0,life:.85+ticks*(dot?tickGap:.14),
       nextTick:.3,remaining:ticks,tickGap,role,chain:role==='chain'?level+2:0,radius,damage:Math.round(total/ticks),color:d.color,aspect:d.aspect};
-    // Sheets without drawn flight cels throw their own opening spark at the foe.
-    if (legendFx[kind] && !LEGEND_TRAVEL[kind]) launch(fx,{x,y},FLY_TIME.legend,{sheet:legendFx[kind],frame:0,color:d.color});
-    state.effects.push(fx);
+    fx.nextTick=legendContactTime(fx);
+    fx.life=fx.nextTick+(ticks-1)*tickGap+(LEGEND_TRAVEL[kind]?.tail||.3);
+    if (kind === 'starfall_shard') {
+      // One top-right meteor per foe; splitting the original budget keeps the
+      // multi-target presentation from multiplying total attack damage.
+      const victims=targets;
+      const perHit=Math.max(1,Math.round(total/Math.max(1,victims.length*ticks)));
+      victims.forEach((enemy,i)=>state.effects.push({...fx,x:enemy.x,target:enemy,damage:perHit,onlyTarget:true,age:-i*.065,life:fx.life+i*.065}));
+    } else {
+      // Sheets without drawn flight cels throw their own opening spark at the foe.
+      if (legendFx[kind] && !LEGEND_TRAVEL[kind]) launch(fx,{x,y},FLY_TIME.legend,{sheet:legendFx[kind],frame:0,color:d.color});
+      state.effects.push(fx);
+    }
     if (kind === 'generic_bolt') {
       state.arcs.push({x:x,y:y,ex:target.x,ey:target.y-target.size,life:.28,color:d.color,level});
       beep(300+level*40,.12,'sine',.02);
     } else {
-      state.shake=Math.max(state.shake,level*1.2); beep(90+level*18,.14,'sawtooth',.025);
+      beep(200+level*35,.045,'triangle',.012);
     }
   } else {
     const delayBase = (profile.impact === 'bow' || profile.impact === 'spear' || profile.pierce) ? .24 : 0;
-    for (let i=0;i<itemShots(item);i++) state.projectiles.push({x,y:y-i*3,vx:460+level*45,vy:0,target:targets[i%targets.length],
+    for (let i=0;i<itemShots(item);i++) state.projectiles.push({x,y:y-i*3,vx:Math.max(460+level*45,(targets[i%targets.length].x-x)/.34),vy:0,target:targets[i%targets.length],
       type:item.type,color:d.color,level,damage:dmg,life:2.5,phase:i*1.2,delay:delayBase+i*.085,hitIds:new Set(),
       impact:profile.impact||'vortex', splash:!!profile.splash, pierce:!!profile.pierce, aspect:d.aspect});
     if (profile.impact === 'vortex' && level===4) state.effects.push({kind:'vortex',x:target.x,level,age:0,life:1.1,nextTick:.25,remaining:3,damage:Math.round(dmg*.25),radius:95,aspect:d.aspect});
     beep(profile.impact==='slash'?420:260,.06,'triangle',.018);
   }
   // srcRole, not role: `fx.role` already picks the tick behavior of ground effects.
-  for (const fx of state.effects.slice(fxFrom)) { fx.eliteMul = eliteMul; fx.srcRole = d.role; }
-  for (const p of state.projectiles.slice(shotFrom)) { p.eliteMul = eliteMul; p.srcRole = d.role; }
+  for (const fx of state.effects.slice(fxFrom)) { fx.eliteMul = eliteMul; fx.srcRole = d.role; fx.temper = item.temper || null; }
+  for (const p of state.projectiles.slice(shotFrom)) { p.eliteMul = eliteMul; p.srcRole = d.role; p.temper = item.temper || null; }
   return true;
 }
 function updateEffects(dt, combat) {
   state.handFlash=Math.max(0,state.handFlash-dt);state.attackLock=Math.max(0,(state.attackLock||0)-dt);
   for(const fx of state.effects) {
     fx.age+=dt; fx.life-=dt;
+    if(fx.age<0)continue;
     if (inFlight(fx)) {
       if (fx.target?.hp>0) { fx.x=fx.target.x; fx.y=fx.target.y-fx.target.size; }
       continue;
@@ -485,24 +523,30 @@ function updateEffects(dt, combat) {
     if ((fx.kind==='beam'||fx.kind==='slam'||fx.kind==='runes'||fx.kind==='thunder_halberd'||fx.kind==='generic_slam'||fx.kind==='generic_bolt') && fx.age<.28 && fx.target?.hp>0) fx.x=fx.target.x;
     if (legendFx[fx.kind]) {
       const pose = legendPose(impactView(fx));
-      fx.x = pose.x; fx.lift = pose.lift;
       if (!pose.landed) continue;
+      if(fx.impactX==null){fx.impactX=pose.x;fx.impactY=pose.y;}
+      fx.x=fx.impactX;fx.y=fx.impactY;
     }
     if (fx.kind==='orbs' && fx.target?.hp>0) { fx.x=fx.target.x; fx.y=fx.target.y-fx.target.size; }
     if (fx.kind==='flurry' && fx.target?.hp>0) { fx.x=fx.target.x+(fx.orbit!=null?Math.cos(fx.age*8+fx.orbit)*18:0); fx.y=fx.target.y-fx.target.size; }
     if (!combat || !fx.remaining || fx.age<fx.nextTick) continue;
-    fx.remaining--; fx.nextTick+=fx.tickGap||(fx.kind==='flurry'?.06:fx.kind==='reap'?.14:.18);
-    const color=fx.kind==='thunderfield'||fx.kind==='thunder_halberd'||fx.kind==='generic_bolt'?'#95e8ff':fx.kind==='vortex'?'#d3f994':fx.kind==='slam'||fx.kind==='generic_slam'?'#e8b878':fx.kind==='reap'?'#c8e0a8':fx.kind==='runes'?'#d4b8ef':fx.kind==='orbs'?'#a8d4ef':fx.kind==='flurry'?'#f0d090':'#e7bdff';
+    fx.remaining--; fx.lastTickAge=fx.age;fx.nextTick=fx.age+(fx.tickGap||(fx.kind==='flurry'?.06:fx.kind==='reap'?.14:.18));
+    const color=fx.color||(fx.kind==='thunderfield'||fx.kind==='thunder_halberd'||fx.kind==='generic_bolt'?'#95e8ff':fx.kind==='vortex'?'#d3f994':fx.kind==='slam'||fx.kind==='generic_slam'?'#e8b878':fx.kind==='reap'?'#c8e0a8':fx.kind==='runes'?'#d4b8ef':fx.kind==='orbs'?'#a8d4ef':fx.kind==='flurry'?'#f0d090':'#e7bdff');
     const inside=e=>e.hp>0&&Math.abs(e.x-fx.x)<=(fx.radius||20)+e.size;
     if(fx.kind==='orbs'||fx.kind==='flurry'){
       if(fx.target?.hp>0)strike(fx.target,fx.damage,color,fx);
+    } else if(fx.onlyTarget){
+      if(fx.target?.hp>0)strike(fx.target,fx.damage,fx.color||color,fx);
     } else if(fx.role==='burst'){
       const focus=fx.target?.hp>0?fx.target:state.enemies.filter(inside).sort((a,b)=>Math.abs(a.x-fx.x)-Math.abs(b.x-fx.x))[0];
       if(focus)strike(focus,fx.damage,color,fx);
     } else if(fx.role==='chain'){
       const links=state.enemies.filter(e=>e.hp>0).sort((a,b)=>Math.abs(a.x-fx.x)-Math.abs(b.x-fx.x)).slice(0,fx.chain);
       links.forEach((e,i)=>{
-        if(i)state.arcs.push({x:links[i-1].x,y:links[i-1].y-links[i-1].size,ex:e.x,ey:e.y-e.size,life:.26,color:fx.color||color,level:fx.level});
+        if(i){
+          state.arcs.push({x:links[i-1].x,y:links[i-1].y-links[i-1].size,ex:e.x,ey:e.y-e.size,life:.26,color:fx.color||color,level:fx.level});
+          state.effects.push({kind:'chain_hit',x:e.x,y:e.y-e.size,age:0,life:.22,level:fx.level,color:fx.color||color});
+        }
         strike(e,Math.round(fx.damage*CHAIN_FALLOFF[i]),color,fx);
       });
     } else {
@@ -512,8 +556,8 @@ function updateEffects(dt, combat) {
       }
       state.enemies.filter(inside).forEach(e=>strike(e,fx.damage,color,fx));
     }
-    state.shake=Math.max(state.shake,fx.level*1.5);
-    if(fx.kind==='beam'||fx.kind==='slam'||fx.kind==='runes'||fx.kind==='thunder_halberd'||fx.kind==='generic_slam'||legendFx[fx.kind]) { state.flash=Math.max(state.flash,.12+fx.level*.045); beep(160+fx.level*70,.12,'triangle',.035); }
+    if(!fx.feltImpact)impactFeedback(fx);
+    if(fx.kind==='beam'||fx.kind==='thunder_halberd')state.flash=Math.max(state.flash,.08);
   }
   state.effects=state.effects.filter(fx=>fx.life>0);
 }
@@ -537,14 +581,14 @@ function impact(p, enemy) {
     }
     if((kind==='spear'||p.pierce)&&p.level>=3&&p.hitIds.size===1)state.enemies.filter(e=>e!==enemy&&e.hp>0&&Math.abs(e.x-enemy.x)<60).forEach(e=>strike(e,Math.round(p.damage*.3),p.color,p));
   }
-  if(impactKind==='vortex' && p.level<4)state.effects.push({kind:'vortex',x:enemy.x,level:p.level,age:0,life:.72});
+  if(impactKind==='vortex' && p.level<4)state.effects.push({kind:'vortex',x:enemy.x,y:enemy.y-enemy.size,level:p.level,age:0,life:.32});
   if(impactKind==='fire') {
-    state.effects.push({kind:'fire',x:enemy.x,level:p.level,age:0,life:.8+p.level*.08});
+    state.effects.push({kind:'fire',x:enemy.x,y:enemy.y-enemy.size,level:p.level,age:0,life:.58});
     if(p.splash!==false && (p.splash || p.type==='axe') && p.level>=2)
       state.enemies.filter(e=>e!==enemy && e.hp>0 && Math.abs(e.x-enemy.x)<[0,35,70,105][p.level-1]).forEach(e=>strike(e,Math.round(p.damage*.5),p.color,p));
     state.shake=Math.max(state.shake,p.level*1.4);
   }
-  if(impactKind==='slash') state.effects.push({kind:'slash',x:enemy.x,level:p.level,age:0,life:.9});
+  if(impactKind==='slash') state.effects.push({kind:'slash',x:enemy.x,y:enemy.y-enemy.size,level:p.level,age:0,life:.26});
 }
 function updateCombat(dt) {
   state.encounterTime=(state.encounterTime||0)+dt;spawnScheduledEnemies();
@@ -569,7 +613,7 @@ function updateCombat(dt) {
     e.blight=Math.max(0,(e.blight||0)-dt);
     e.hit=Math.max(0,e.hit-dt);
     if(e.boss){updateBoss(e,kind,dt,slowed);if(state.mode!=='running')return;if(e.stun>0)continue;}
-    e.x-=e.speed*dt*aura*slowed*(kind?.charge&&e.age%3<.55?2.2:1); e.attack-=dt*slowed;
+    e.x-=e.speed*ENEMY_PACE*dt*aura*slowed*(kind?.charge&&e.age%3<.55?2.2:1); e.attack-=dt*slowed;
     if(kind?.flying)e.y=(e.baseY??H*.78)-12+Math.sin(e.age*5)*9;
     if(kind?.regen&&!(e.blight>0))e.hp=Math.min(e.maxHp,e.hp+kind.regen*dt);
     if(kind?.healer&&e.age>=(e.nextHeal||4)){
@@ -587,8 +631,11 @@ function updateCombat(dt) {
     if(e.x<stop) {
       e.x=stop;
       if(front&&e.attack<=0) {
-        const received=Math.max(1,Math.round((kind?.power||(e.boss?10:4))*(e.elite?1.5:1)*(e.damageScale||1)*(1-PackCore.reductionFor(state.items))));
-        state.damageTaken+=Math.min(state.hp,received);state.hp=Math.max(0,state.hp-received);e.attack=kind?.charge?(e.boss?1.05:.9):1.2;
+        const bites=e.bites||0,ramp=Math.min(BITE_CAP,1+bites*BITE_STEP);
+        const base=(kind?.power||(e.boss?10:4))*(kind?.power?1:CONTACT_MUL);
+        const received=Math.max(1,Math.round(base*ramp*(e.elite?1.5:1)*(e.damageScale||1)*(1-PackCore.reductionFor(state.items))));
+        state.damageTaken+=Math.min(state.hp,received);state.hp=Math.max(0,state.hp-received);e.bites=bites+1;
+        e.attack=e.boss?(kind?.charge?1.05:1.15):(kind?.charge?CHARGE_GAP:ATTACK_GAP);
         state.shake=5; burst(W*.27,H*.78-25,'#f39178',10); beep(95,.1,'sawtooth'); buzz(state.hp<=0?[60,40,120]:25);
         if(state.hp<=0) {finish(false);return;}
       }
@@ -597,10 +644,16 @@ function updateCombat(dt) {
   for(const p of state.projectiles) {
     if(p.delay>0){p.delay-=dt;continue;} p.life-=dt;
     if(p.target.hp<=0) p.target=state.enemies.find(e=>e.hp>0)||p.target;
-    p.vy=(p.target.y-p.target.size-p.y)*3; p.x+=p.vx*dt; p.y+=p.vy*dt;
+    const oldX=p.x,oldY=p.y;
+    // Reach the torso when crossing its X. Exponential Y chasing missed
+    // nearby foes when a shot started at the frog's real raised hand.
+    const remaining=Math.max(.015,(p.target.x-p.x)/p.vx),dy=p.target.y-p.target.size-p.y;
+    p.vy=dy/remaining;p.x+=p.vx*dt;p.y+=dy*Math.min(1,dt/remaining);
     if(Math.random()<.75) state.particles.push({x:p.x,y:p.y,vx:-45,vy:0,life:.2+p.level*.07,max:.5,color:p.color,size:p.level});
     for(const e of state.enemies) {
-      if(e.hp<=0 || p.hitIds.has(e) || Math.abs(e.x-p.x)>e.size+14 || Math.abs(e.y-e.size-p.y)>e.size+18)continue;
+      const t=Math.max(0,Math.min(1,(e.x-oldX)/Math.max(.001,p.x-oldX)));
+      const nearX=oldX+(p.x-oldX)*t,nearY=oldY+(p.y-oldY)*t;
+      if(e.hp<=0 || p.hitIds.has(e) || Math.abs(e.x-nearX)>e.size+14 || Math.abs(e.y-e.size-nearY)>e.size+18)continue;
       p.hitIds.add(e); impact(p,e);
       const pierces=p.pierce||p.type==='spear'||p.type==='bow'&&p.level>=3||p.type==='blade'&&p.level>=2||p.type==='shuriken'&&p.level>=3;
       // Unlimited pierce let one uncommon spear outdamage every mythic on a packed wave.
@@ -666,36 +719,61 @@ const scythe12Fx = assetImage('scythe-fx-v4.png');
 const orbFx = assetImage('orb-fx-v3.png');
 const daggerFx = assetImage('dagger-fx-v3.png');
 const shurikenFx = assetImage('shuriken-fx-v2.png');
-const thunderHalberdFx = assetImage('thunder-halberd-fx-v2.png');
+const thunderHalberdFx = assetImage('thunder-strike-frames-v1.png');
+const stormHitFx = assetImage('epic-spark-arc-frames-v1.png');
 // Flight frames cross from the frog to the target. Later frames are the hit and stay there.
 const LEGEND_TRAVEL = {
-  void_greatsword: { hit: 6 },
-  bone_scythe: { hit: 8 },
-  phoenix_lance: { hit: 3 }
+  void_greatsword: { hit: 6, path:'shot', size:110, body:true },
+  bone_scythe: { hit: 4, path:'sweep', size:145, body:true },
+  phoenix_lance: { hit: 4, path:'shot', size:145, ground:true },
+  frost_scepter: { hit: 4, path:'fall', size:138, ground:true },
+  glacial_estoc: { hit: 6, path:'shot', size:85, body:true },
+  thunder_hammer: { hit: 4, path:'placed', size:150, ground:true, column:[3,4,5] },
+  holy_flail: { hit: 5, path:'sweep', size:122, body:true },
+  solar_bow: { hit: 4, path:'shot', size:100, body:true, core:true },
+  dragon_pike: { hit: 5, path:'shot', size:74, body:true, contact:.24, tail:.24, flip:true },
+  starfall_shard: { hit: 5, path:'meteor', size:72, body:true, core:true },
+  eclipse_censer: { hit: 4, path:'placed', size:176, body:true, hover:true },
+  moon_glaive: { hit: 7, path:'shot', size:76, body:true, contact:.24, tail:.24 },
+  clockwork_trap: { hit: 8, path:'lob', size:66, ground:true, contact:.28, tail:.22 },
+  blood_falchion: { hit: 4, path:'sweep', size:114, body:true },
+  astral_mirror: { hit: 6, path:'shot', size:76, body:true, contact:.28, tail:.26 },
+  abyss_eye: { hit: 6, path:'placed', size:154, ground:true },
+  chaos_flail: { hit: 6, path:'sweep', size:78, body:true, contact:.26, tail:.25 },
+  demon_inferno: { hit: 2, path:'placed', size:178, ground:true },
+  spirit_epic: { hit: 3, path:'shot', size:120, ground:true },
+  plague_censer: { hit: 4, path:'placed', size:115, ground:true },
+  tome_rune: { hit: 5, path:'placed', size:116, ground:true },
+  tempest_vortex: { hit: 6, start:3, path:'shot', size:84, body:true, hover:true, contact:.26, tail:.26 },
+  doomsday_bell: { hit: 3, path:'placed', size:130, body:true }
 };
 const legendFx = {
-  eclipse_censer: assetImage('eclipse-censer-fx-v2.png'),
+  eclipse_censer: assetImage('eclipse-censer-fx-v3.png'),
   void_greatsword: assetImage('void-greatsword-fx-v2.png'),
   doomsday_bell: assetImage('doomsday-bell-fx-v2.png'),
   bone_scythe: assetImage('bone-scythe-fx-v2.png'),
-  phoenix_lance: assetImage('phoenix-lance-fx-v1.png?v=fx2'),
-  abyss_eye: assetImage('abyss-eye-fx-v2.png'),
+  phoenix_lance: assetImage('phoenix-lance-fx-v1.png'),
+  abyss_eye: assetImage('abyss-eye-fx-v3.png'),
   demon_inferno: assetImage('demon-fx-v2.png'),
   spirit_epic: assetImage('spirit-epic-fx-v2.png'),
-  frost_scepter: assetImage('frost-scepter-fx-v2.png'),
-  thunder_hammer: assetImage('thunder-hammer-fx-v2.png'),
-  holy_flail: assetImage('holy-flail-fx-v2.png'),
-  blood_falchion: assetImage('blood-falchion-fx-v2.png'),
+  frost_scepter: assetImage('frost-scepter-fx-v4.png'),
+  glacial_estoc: assetImage('epic-ice-spike-frames-v1.png'),
+  thunder_hammer: assetImage('thunder-hammer-fx-v4.png'),
+  holy_flail: assetImage('holy-flail-fx-v5.png'),
+  blood_falchion: assetImage('blood-falchion-fx-v3.png'),
   plague_censer: assetImage('plague-censer-fx-v2.png'),
-  astral_mirror: assetImage('astral-mirror-fx-v2.png'),
-  starfall_shard: assetImage('starfall-shard-fx-v2.png'),
+  astral_mirror: assetImage('astral-mirror-fx-v3.png'),
+  starfall_shard: assetImage('starfall-shard-fx-v3.png'),
   tome_rune: assetImage('tome-fx-v4.png'),
-  solar_bow: assetImage('solar-bow-fx-v2.png'),
-  dragon_pike: assetImage('dragon-pike-fx-v1.png'),
-  chaos_flail: assetImage('chaos-flail-fx-v1.png'),
-  moon_glaive: assetImage('moon-glaive-fx-v1.png'),
+  solar_bow: assetImage('solar-bow-fx-v4.png'),
+  dragon_pike: assetImage('epic-fire-crescent-frames-v1.png'),
+  chaos_flail: assetImage('chaos-flail-fx-v2.png'),
+  moon_glaive: assetImage('moon-glaive-fx-v2.png'),
   clockwork_trap: assetImage('clockwork-trap-fx-v1.png')
 };
+// Wind and chaos share ink, but wind uses the sustained spiral cels, higher in
+// the air; chaos plays the complete compression/impact sequence.
+legendFx.tempest_vortex = legendFx.chaos_flail;
 const axe12Fx = assetImage('axe-fx-v3.png');
 const blade12Fx = assetImage('blade-fx-v3.png');
 const slamFrames = assetImage('slam-frames-v1.png');
@@ -712,7 +790,34 @@ function draw12FrameFx(sheet,frame,x,ground,destW,destH,anchorY=1.0){
   frame=Math.max(0,Math.min(11,frame|0));
   const sw=sheet.naturalWidth/cols,sh=sheet.naturalHeight/rows;
   const col=frame%cols,row=Math.floor(frame/cols);
-  ctx.drawImage(sheet,col*sw,row*sh,sw,sh,x-destW/2,ground-destH*anchorY,destW,destH);
+  drawAtlasFrame(sheet,frame,cols,rows,x,ground,destW,destH,.5,anchorY);
+  return true;
+}
+function fxAtlas(sheet,cols=4,rows=3){
+  const m=typeof FX_ATLAS_DATA==='undefined'?null:FX_ATLAS_DATA[sheet?.assetName];
+  return m&&m.cols===cols&&m.rows===rows&&m.size[0]===sheet.naturalWidth&&m.size[1]===sheet.naturalHeight?m:null;
+}
+function drawAtlasFrame(sheet,frame,cols,rows,x,y,w,h,ax=.5,ay=.5){
+  if(!sheet?.complete||!sheet.naturalWidth)return false;
+  frame=Math.max(0,Math.min(cols*rows-1,frame|0));
+  const sw=sheet.naturalWidth/cols,sh=sheet.naturalHeight/rows,ox=(frame%cols)*sw,oy=Math.floor(frame/cols)*sh;
+  const [sx,sy,cw,ch]=fxAtlas(sheet,cols,rows)?.frames[frame]||[ox,oy,sw,sh];
+  ctx.drawImage(sheet,sx,sy,cw,ch,x-w*ax+(sx-ox)/sw*w,y-h*ay+(sy-oy)/sh*h,cw/sw*w,ch/sh*h);
+  return true;
+}
+// Extend only the uninterrupted neck of a painted sky column. The impact and
+// its curls retain their proportions; the upper end lives beyond the canvas.
+function drawSkyColumn(sheet,frame,x,ground,width,height){
+  if(!sheet?.complete||!sheet.naturalWidth)return false;
+  const sw=sheet.naturalWidth/4,sh=sheet.naturalHeight/3,ox=frame%4*sw,oy=Math.floor(frame/4)*sh;
+  const m=fxAtlas(sheet),b=m?.boxes[frame]||[0,0,1,1];
+  const neck=m?.necks[frame]||[ox+sw*.38,oy+sh*.07,sw*.24];
+  const [nx,split,nw]=neck;
+  const foot=m?.boxes[frame]?.[3]||1,join=ground-(foot-(split-oy)/sh)*height;
+  const [sx,sy,cw,ch]=m?.frames[frame]||[ox,oy,sw,sh];
+  ctx.drawImage(sheet,nx,split,nw,2,x-width/2+(nx-ox)/sw*width,-32,nw/sw*width,Math.max(1,join+32));
+  const bottom=Math.min(sy+ch,oy+foot*sh);
+  ctx.drawImage(sheet,sx,split,cw,Math.max(1,bottom-split),x-width/2+(sx-ox)/sw*width,join,cw/sw*width,(bottom-split)/sh*height);
   return true;
 }
 /** Cohesive sky strike — one stroke language top→bottom (no sheet splice). */
@@ -794,6 +899,11 @@ function drawEpicLightning(x,ground,frame){
 }
 function drawSkyThunderFx(sheet,frame,x,ground){
   frame=Math.max(0,Math.min(11,frame|0));
+  if(sheet?.complete&&sheet.naturalWidth){
+    const h=Math.min(ground*.65,180*castScale()),w=h*.85;
+    if(frame>=3&&frame<=7)return drawSkyColumn(sheet,frame,x,ground,w,h);
+    return draw12FrameFx(sheet,frame,x,ground,w,h,legendAnchor(sheet));
+  }
   if(frame>=10){
     if(sheet?.complete&&sheet.naturalWidth){
       const sw=sheet.naturalWidth/4,sh=sheet.naturalHeight/3;
@@ -813,6 +923,8 @@ function drawSkyThunderFx(sheet,frame,x,ground){
 // Painted extents per cell as cell fractions: cells carry a lot of padding, so art is sized by what is drawn.
 // feet[i] is the lowest dense row of paint. Null when pixels are unreadable (no canvas, tainted image).
 function sheetBounds(sheet, cols=4, rows=3) {
+  const measured=fxAtlas(sheet,cols,rows);
+  if(measured)return {frames:measured.boxes,feet:measured.boxes.map(b=>b[3]),union:measured.union};
   const key=cols+'x'+rows;
   if (sheet._bounds?.key===key) return sheet._bounds.value;
   sheet._bounds={key,value:null};
@@ -856,22 +968,89 @@ function legendPaintHeight(sheet) {
   return union ? Math.max(.35, union[3]-union[1]) : .8;
 }
 function legendFrame(fx) {
-  // Flight sheets must not loop back into their flight cels.
-  const hit = LEGEND_TRAVEL[fx.kind]?.hit;
-  const loop = hit ? [hit, Math.min(11, hit + 3)] : [4, 8];
-  return artFrame(fx.age, Math.max(.28, fx.age + fx.life), TWELVE_HOLDS, loop);
+  const cfg=LEGEND_TRAVEL[fx.kind]||{},hit=cfg.hit||4,start=cfg.start||0;
+  const age=Math.max(0,fx.age),contact=legendContactTime(fx),tail=cfg.tail||.3;
+  if(age<contact)return start+celFrame(age,contact,TWELVE_HOLDS.slice(start,hit));
+  const tailStart=Math.max(contact,fx.age+fx.life-tail);
+  // A hold only reuses the two contact cels. Never rewind the projectile or
+  // the dissipation into an explosion just because damage lasts longer.
+  if(age<tailStart)return hit+Math.min(1,Math.floor(Math.max(0,age-(fx.lastTickAge??contact))/.065));
+  return hit+celFrame(age-tailStart,tail,TWELVE_HOLDS.slice(hit));
+}
+function legendContactTime(fx){
+  const cfg=LEGEND_TRAVEL[fx.kind]||{};
+  return cfg.contact??(cfg.path==='meteor'?.34:fx.kind==='eclipse_censer'?.32:.28);
 }
 function legendPose(fx) {
-  const travel = LEGEND_TRAVEL[fx.kind];
-  const frame = legendFrame(fx);
-  // A thrown effect is planted where it landed; sliding along with the foe reads as jitter.
-  const to = fx.fly ? fx.x : fx.target?.hp > 0 ? fx.target.x : fx.x;
-  if (!travel || frame >= travel.hit) return { x: to, lift: 0, frame, landed: true };
-  const t = frame / travel.hit;
-  const ease = t * t * (3 - 2 * t);
-  if (travel.sky) return { x: to, lift: 0, frame, landed: false };
-  const from = fx.fromX != null ? fx.fromX : to;
-  return { x: from + (to - from) * ease, lift: 0, frame, landed: false };
+  const cfg=LEGEND_TRAVEL[fx.kind]||{},frame=legendFrame(fx);
+  const live=fx.target?.hp>0,tx=fx.impactX??(live?fx.target.x:fx.x);
+  const hoverY=groundY()-Math.min((cfg.size||115)*[1,1.12,1.26,1.4][fx.level-1]*castScale(),W*.46,H*.5)*.47;
+  const ty=fx.impactY??(cfg.hover?hoverY:cfg.ground?groundY()+3:live?fx.target.y-fx.target.size:(fx.y??groundY()-34*castScale()));
+  const release=cfg.path==='meteor'||cfg.path==='fall'?0:.06;
+  const t=Math.max(0,Math.min(1,(fx.age-release)/Math.max(.01,legendContactTime(fx)-release)));
+  if(t>=1||!cfg.hit)return {x:tx,y:ty,lift:0,frame,landed:true};
+  if(cfg.path==='placed')return {x:tx,y:ty,lift:0,frame,landed:false};
+  const meteor=cfg.path==='meteor',fall=cfg.path==='fall';
+  const fromX=meteor?Math.min(W-8,tx+(ty+70)*.62):fall?tx:(fx.fromX??W*.27+36);
+  const fromY=meteor||fall?-70:(fx.fromY??groundY()-40*castScale());
+  const ease=meteor?t*t:1-(1-t)**1.45;
+  const arc=cfg.path==='lob'?Math.sin(Math.PI*t)*Math.min(46*castScale(),(tx-fromX)*.28):0;
+  return {x:fromX+(tx-fromX)*ease,y:fromY+(ty-fromY)*ease-arc,lift:0,frame,landed:false};
+}
+function legendLayout(fx,pose=legendPose(fx)){
+  const cfg=LEGEND_TRAVEL[fx.kind]||{},sheet=legendFx[fx.kind],m=fxAtlas(sheet);
+  const union=m?.union||[.05,.05,.95,.95],extent=Math.max(union[2]-union[0],union[3]-union[1],.4);
+  const size=Math.min((cfg.size||115)*[1,1.12,1.26,1.4][fx.level-1]*castScale(),W*.46,H*.5);
+  let w=size/extent,h=w;
+  const core=cfg.core?m?.cores[pose.frame]:null;
+  const ax=core?.[0]??(union[0]+union[2])/2,ay=core?.[1]??(cfg.ground?union[3]:(union[1]+union[3])/2);
+  let x=pose.x,y=pose.y;
+  // Incoming sky projectiles intentionally enter from outside. All impact
+  // paint, including edge targets and flying enemies, fits inside the scene.
+  if(pose.landed||cfg.path==='placed'){
+    const bounds=cfg.core&&m?m.boxes.slice(cfg.hit).map((b,i)=>{const c=m.cores[i+cfg.hit];return [c[0]-b[0],c[1]-b[1],b[2]-c[0],b[3]-c[1]];}):[[ax-union[0],ay-union[1],union[2]-ax,union[3]-ay]];
+    const pads=[0,1,2,3].map(i=>Math.max(.01,...bounds.map(b=>b[i])));
+    const fit=Math.max(.06,Math.min(1,(x-4)/(pads[0]*w),(W-4-x)/(pads[2]*w),(y-4)/(pads[1]*h),(H-4-y)/(pads[3]*h)));
+    w*=fit;h*=fit;
+  }
+  return {x,y,w,h,ax,ay};
+}
+function drawLegendFx(fx){
+  const pose=legendPose(fx),cfg=LEGEND_TRAVEL[fx.kind]||{},sheet=legendFx[fx.kind],l=legendLayout(fx,pose);
+  if(fx.kind==='clockwork_trap'){
+    if(!pose.landed){
+      const size=(24+fx.level*2)*castScale();ctx.save();ctx.translate(pose.x,pose.y);ctx.rotate(fx.age*9);
+      drawItemArt({type:'clockwork_trap',level:fx.level},-size/2,-size/2,size);ctx.restore();return true;
+    }
+    // A little toothed snare closes around the feet, not a torso-high spell.
+    const snap=Math.max(0,1-(fx.age-(fx.lastTickAge??legendContactTime(fx)))/.12);
+    return drawAtlasFrame(sheet,pose.frame,4,3,l.x,groundY()+2,l.w,l.h*(.4+snap*.2),l.ax,l.ay);
+  }
+  if(cfg.path==='meteor'&&!pose.landed){
+    const tx=fx.target?.hp>0?fx.target.x:fx.x,ty=fx.target?.hp>0?fx.target.y-fx.target.size:fx.y??groundY()-30;
+    const sx=Math.min(W-8,tx+(ty+70)*.62),angle=Math.atan2(ty+70,tx-sx)-Math.atan2(1,-.62);
+    ctx.save();ctx.translate(pose.x,pose.y);ctx.rotate(angle);
+    const result=drawAtlasFrame(sheet,pose.frame,4,3,0,0,l.w,l.h,l.ax,l.ay);ctx.restore();return result;
+  }
+  if(cfg.path==='fall'&&!pose.landed){
+    const size=(48+fx.level*5)*castScale();ctx.save();ctx.translate(pose.x,pose.y);ctx.rotate(Math.PI/2);
+    const result=drawAtlasFrame(legendFx.glacial_estoc,3+Math.floor(Math.max(0,fx.age)*12)%2,4,3,0,0,size,size);
+    ctx.restore();return result;
+  }
+  if(cfg.column?.includes(pose.frame)&&pose.frame>=cfg.hit)return drawSkyColumn(sheet,pose.frame,l.x,groundY()+3,l.w,l.h);
+  if(fx.kind==='dragon_pike'){
+    ctx.save();ctx.translate(l.x,l.y);ctx.scale(-1,1);
+    // The clean fire atlas contains no baked ground. In flight its drawn
+    // crescent is a narrow lance; on contact it opens into a small flame cut.
+    const result=drawAtlasFrame(sheet,pose.landed?pose.frame:Math.min(4,pose.frame),4,3,0,0,l.w,l.h*(pose.landed?.8:.46),l.ax,l.ay);
+    ctx.restore();return result;
+  }
+  if(fx.kind==='tempest_vortex'){
+    ctx.save();ctx.translate(l.x,l.y);ctx.rotate(fx.age*5);
+    const fit=pose.landed?Math.max(.05,Math.min(1,2*Math.min(l.x-4,W-4-l.x,l.y-4,H-4-l.y)/Math.hypot(l.w,l.h))):1;
+    const result=drawAtlasFrame(sheet,pose.frame,4,3,0,0,l.w*fit,l.h*fit,l.ax,l.ay);ctx.restore();return result;
+  }
+  return drawAtlasFrame(sheet,pose.frame,4,3,l.x,l.y,l.w,l.h,l.ax,l.ay);
 }
 // Hits leave the frog first instead of popping inside the foe. Damage and the hit cels wait for the landing.
 const FLY_TIME={legend:.18,orbs:.16,flurry:.12,reap:.14};
@@ -946,7 +1125,7 @@ let boundsWarmPending=false;
 function warmFxBounds() {
   if (boundsWarmPending || typeof requestIdleCallback!=='function') return;
   const sheets=[...Object.values(legendFx).map(s=>[s,4,3]),[scythe12Fx,4,3],[orbFx,6,1]];
-  const next=sheets.find(([s,c,r])=>s.complete&&s.naturalWidth&&s._bounds?.key!==c+'x'+r);
+  const next=sheets.find(([s,c,r])=>s.complete&&s.naturalWidth&&!fxAtlas(s,c,r)&&s._bounds?.key!==c+'x'+r);
   if (!next) return;
   boundsWarmPending=true;
   requestIdleCallback(()=>{boundsWarmPending=false;sheetBounds(...next);});
@@ -964,14 +1143,9 @@ function drawCel(sheet,col,row,cols,rows,x,y,w,h) {
 }
 function drawSkyBeam(frame,x,ground,width,height) {
   if(!beamFrames.complete||!beamFrames.naturalWidth)return false;
-  if(frame<4||frame>8)return drawCel(beamFrames,frame%4,Math.floor(frame/4),4,3,x,ground,width,height);
-  const sw=beamFrames.naturalWidth/4,sh=beamFrames.naturalHeight/3;
-  const sx=(frame%4)*sw,sy=Math.floor(frame/4)*sh;
-  const split=sh*.12,stripStart=sh*.04;
-  const join=ground-height*.88,sky=-32;
-  ctx.drawImage(beamFrames,sx,sy+stripStart,sw,split-stripStart,x-width/2,sky,width,join-sky);
-  ctx.drawImage(beamFrames,sx,sy+split,sw,sh-split,x-width/2,join,width,height*.88);
-  return true;
+  x=Math.max(width*.5+4,Math.min(W-width*.5-4,x));
+  if(frame>=3&&frame<=7)return drawSkyColumn(beamFrames,frame,x,ground,width,height);
+  return draw12FrameFx(beamFrames,frame,x,ground,width,height,legendAnchor(beamFrames));
 }
 function skyBeamFrame(fx){
   return fx.age<.28 ? celFrame(fx.age,.28,[.06,.08,.10,.04]) : 4+artFrame(fx.age-.28,fx.age+fx.life-.28,[.13,.1,.16,.1,.1,.08,.1,.12],[1,5]);
@@ -984,7 +1158,7 @@ function drawStripFx(sheet,frame,x,ground,destH,cols=6,widthScale=1){
   const destW=Math.max(28,destH*(sw/Math.max(1,sh))*widthScale);
   ctx.imageSmoothingEnabled=true;
   ctx.imageSmoothingQuality='high';
-  ctx.drawImage(sheet,col*sw,0,sw,sh,x-destW/2,ground-destH,destW,destH);
+  drawAtlasFrame(sheet,col,cols,1,x,ground,destW,destH,.5,1);
   return true;
 }
 function stripFrame(fx,holds=[.1,.12,.16,.18,.16,.12]){
@@ -1010,20 +1184,25 @@ function renderCombatEffects() {
     if(typeof ctx.beginPath!=='function')break;
     ctx.save();ctx.globalAlpha=Math.max(0,a.life/.32);ctx.strokeStyle=a.color||'#8cdeef';ctx.lineWidth=2+a.level*.4;
     ctx.beginPath();ctx.moveTo(a.x,a.y);
-    const mx=(a.x+a.ex)/2+(Math.random()-.5)*18,my=(a.y+a.ey)/2-20;
+    const mx=(a.x+a.ex)/2+Math.sin(a.x*.1+a.ex*.07)*9,my=(a.y+a.ey)/2-20;
     ctx.quadraticCurveTo(mx,my,a.ex,a.ey);ctx.stroke();
     ctx.strokeStyle='#3a2a18';ctx.lineWidth=1.2;ctx.stroke();ctx.restore();
   }
   for(const raw of state.effects) {
+    if(raw.age<0)continue;
     if(inFlight(raw)){drawFlight(raw);continue;}
     const fx=impactView(raw);
     ctx.save();
     if(raw.life<FX_FADE)ctx.globalAlpha=Math.max(0,raw.life/FX_FADE);
-    const pop=fxPopScale(fx.age);
+    const pop=legendFx[fx.kind]||fx.kind==='chain_hit'?1:fxPopScale(fx.age);
     if(pop!==1&&typeof ctx.scale==='function'){ctx.translate(fx.x,ground);ctx.scale(pop,pop);ctx.translate(-fx.x,-ground);}
-    if(fx.kind==='beam') {
+    if(fx.kind==='chain_hit'){
+      const r=(14+fx.level*2)*castScale(),t=fx.age/.22;
+      ctx.globalAlpha*=1-t;
+      inkStroke(()=>{ctx.moveTo(fx.x-r,fx.y);ctx.lineTo(fx.x-r*.2,fx.y-r*.15);ctx.lineTo(fx.x,fx.y-r);ctx.lineTo(fx.x+r*.2,fx.y-r*.15);ctx.lineTo(fx.x+r,fx.y);ctx.lineTo(fx.x+r*.2,fx.y+r*.15);ctx.lineTo(fx.x,fx.y+r);ctx.lineTo(fx.x-r*.2,fx.y+r*.15);ctx.closePath();},'#fff4cb',fx.color||'#aa9edd',2);
+    } else if(fx.kind==='beam') {
       const frame=skyBeamFrame(fx);
-      const height=Math.min(ground-10,125+fx.level*26),width=height*(.65+fx.level*.075);
+      const height=Math.min(ground-10,(110+fx.level*20)*castScale(),W*.42),width=height*.85;
       if(fx.level>=3 && frame>=4 && frame<=8) {
         const sideFrame=Math.max(4,frame-1),side=width*.45;
         drawSkyBeam(sideFrame,fx.x-side,ground,width*.55,height*.8);
@@ -1052,14 +1231,14 @@ function renderCombatEffects() {
       }
     } else if(fx.kind==='orbs') {
       if(fx.showFx===false){ctx.restore();continue;}
-      const h=(64+fx.level*10)*castScale();
+      const h=(42+fx.level*6)*castScale();
       // The orb itself already flew in; the hit starts at the ringed orb and bursts from there.
       const frame=fx.fly?2+artFrame(fx.age,Math.max(.2,fx.age+fx.life),[.12,.2,.2,.16]):stripFrame(fx,[.1,.12,.16,.18,.16,.12]);
       if(!drawStripFx(orbFx,frame,fx.x,(fx.y??ground-24)+h*.5,h,6,1.0)) {
         inkStroke(()=>{ctx.ellipse(fx.x,fx.y??ground-36,9+fx.level,9+fx.level,0,0,Math.PI*2);},fx.color,'#3a2a18',2.2);
       }
     } else if(fx.kind==='flurry') {
-      const h=(60+fx.level*10)*castScale();
+      const h=(fx.sheet==='hammer'?48+fx.level*7:26+fx.level*5)*castScale();
       const sheet=fx.sheet==='hammer'?hammerFx:daggerFx;
       if(!drawStripFx(sheet,stripFrame(fx,[.08,.1,.16,.18,.16,.1]),fx.x,(fx.y??ground-24)+h*.5,h,6,1.0)) {
         ctx.translate(fx.x,fx.y??ground-40);ctx.rotate((fx.tilt||0)*.35-0.4);
@@ -1071,19 +1250,7 @@ function renderCombatEffects() {
         drawStoryColumn(fx.x,ground,28+fx.level*6,Math.min(ground,160+fx.level*20),fx.color||'#0284c7','#3a2a18',fx.age);
       }
     } else if(legendFx[fx.kind]) {
-      // Big epics stay large; this batch of 10 stays compact.
-      const epic=fx.kind==='eclipse_censer'||fx.kind==='demon_inferno'||fx.kind==='abyss_eye';
-      const compact=fx.kind==='frost_scepter'||fx.kind==='thunder_hammer'||fx.kind==='holy_flail'||fx.kind==='blood_falchion'||fx.kind==='plague_censer'||fx.kind==='astral_mirror'||fx.kind==='starfall_shard'||fx.kind==='tome_rune'||fx.kind==='solar_bow'
-        ||fx.kind==='dragon_pike'||fx.kind==='chaos_flail'||fx.kind==='moon_glaive'||fx.kind==='clockwork_trap';
-      const pose=legendPose(fx);
-      const sheet=legendFx[fx.kind];
-      // Targets are the height of the painted art; the cell is scaled up to fit its padding.
-      const paint=(epic?180+fx.level*32:compact?96+fx.level*18:110+fx.level*20)*castScale();
-      const h=paint/legendPaintHeight(sheet);
-      const anchor=legendAnchor(sheet);
-      if(!draw12FrameFx(sheet,pose.frame,pose.x,ground,h*1.08,h,anchor)) {
-        drawStoryColumn(pose.x,ground,38+fx.level*8,h*.7,fx.color||'#e7bdff','#3a2a18',fx.age);
-      }
+      drawLegendFx(fx);
     } else if(fx.kind==='generic_slam') {
       const h=100+fx.level*20;
       const frame=artFrame(fx.age,Math.max(.28,fx.age+fx.life));
@@ -1111,20 +1278,21 @@ function renderCombatEffects() {
         const smoke=fx.kind==='afterburn';
         const f=smoke?4+celFrame(fx.age,.9,[.55,.35]):2+artFrame(fx.age,.56,[.07,.13,.18,.18]);
         // Big ground mushroom — was 48px and stuck on the foe midsection.
-        const size=smoke?90+fx.level*16:120+fx.level*28;
+        const size=(smoke?70+fx.level*10:86+fx.level*12)*castScale();
         if(smoke)ctx.globalAlpha*=.45*Math.max(0,1-fx.age/.9);
         drawCel(newAttackFrames,f,2,6,3,fx.x,ground,size,size);ctx.restore();continue;
       }
       if(fx.kind==='lightning'||fx.kind==='thunderfield') {
-        // Storm Stone uses shared weapon-frames lightning row — thunder_halberd keeps its own sheet.
-        const size=fx.kind==='lightning'?110+fx.level*22:140;
-        const frame=artFrame(fx.age,fx.age+fx.life);
-        drawCel(weaponFrames,frame,3,6,4,fx.x,ground,size,size);
+        const size=(46+fx.level*6)*castScale();
+        if(fx.kind==='lightning'&&fx.age<.16)drawEpicLightning(fx.x,ground,Math.floor(fx.age*24)+2);
+        const frame=4+celFrame(fx.age,.48,[.04,.06,.09,.07,.06,.06,.05,.05]);
+        ctx.globalAlpha*=Math.max(0,1-fx.age/.55);
+        drawAtlasFrame(stormHitFx,frame,4,3,fx.x,fx.y??ground-24*castScale(),size,size);
         ctx.restore();continue;
       }
       if(fx.kind==='fire') {
-        const size=68+fx.level*20;
-        const f12=artFrame(fx.age,Math.max(.28,fx.age+fx.life),TWELVE_HOLDS,[4,8]);
+        const size=(52+fx.level*12)*castScale();
+        const f12=4+celFrame(fx.age,.58,[.06,.10,.08,.08,.07,.07,.06,.06]);
         if(!draw12FrameFx(axe12Fx,f12,fx.x,ground,size*1.2,size,1.0)) {
           const frame=artFrame(fx.age,fx.age+fx.life);
           drawCel(weaponFrames,frame,0,6,4,fx.x,ground,size,size);
@@ -1132,12 +1300,10 @@ function renderCombatEffects() {
         ctx.restore();continue;
       }
       if(fx.kind==='slash') {
-        const size=65+fx.level*18;
-        const f12=artFrame(fx.age,Math.max(.28,fx.age+fx.life),TWELVE_HOLDS,[4,8]);
-        if(!draw12FrameFx(blade12Fx,f12,fx.x,ground,size*1.3,size,1.0)) {
-          const frame=artFrame(fx.age,fx.age+fx.life);
-          drawCel(weaponFrames,frame,1,6,4,fx.x,ground,size,size);
-        }
+        // The old blade sheet has baked checkerboard remnants. Reuse the
+        // clean painted slash cels, once, at the exact projectile hit point.
+        const size=(32+fx.level*5)*castScale(),frame=3+celFrame(fx.age,.26,[.07,.09,.10]);
+        drawAtlasFrame(weaponFrames,6+frame,6,4,fx.x,fx.y??ground-28,size,size);
         ctx.restore();continue;
       }
       const row={vortex:2}[fx.kind];
@@ -1160,7 +1326,7 @@ const HERO_CELS = [
   [0,440,475,430,440,194], [480,440,406,430,342,200],
   [906,440,411,430,332,223], [1338,440,436,430,377,240]
 ];
-function heroCel() { return state.handFlash>0?celFrame(.78-state.handFlash,.78,[.06,.08,.1,.07,.15,.11,.1,.11]):0; }
+function heroCel() { return state.handFlash>0?celFrame(HERO_ATTACK_DURATION-state.handFlash,HERO_ATTACK_DURATION,[.035,.045,.055,.045,.08,.08,.07,.09]):0; }
 function drawHeldWeapons(size,ground,hand=null) {
   if(state.phase==='chest')return;
   const item=(state.mode==='loot'&&state.loot[0])||state.items.find(i=>i.id===state.heldId&&!TYPES[i.type].gear)||state.items.find(i=>!TYPES[i.type].gear);if(!item)return;

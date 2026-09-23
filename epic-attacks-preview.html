@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Эпическое оружие — пять атак</title>
+<style>body{margin:0;background:#18231d;color:#f1e4b8;font:16px system-ui;padding:20px}h1{font-size:23px}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}article{background:#2c3a2e;border:1px solid #65714b;border-radius:16px;overflow:hidden}h2{font-size:17px;margin:14px}canvas{width:100%;display:block}button{background:#d8c778;border:0;border-radius:8px;padding:10px 20px;margin-bottom:20px;cursor:pointer}</style>
+<h1>Эпическое оружие — пять атак</h1><button id="pause">Пауза</button><main id="grid"></main>
+<script src="assets/epic-frame-regions.js"></script>
+<script>
+const attacks=[['epic-fire-crescent','Огненный полумесяц'],['epic-ice-spike','Ледяной шип'],['epic-spark-arc','Электрическая дуга'],['epic-vine-whip','Удар лозы'],['epic-moon-cut','Лунный разрез']];
+const holds=[100,100,140,65,85,90,140,100,90,100,110,150],duration=holds.reduce((a,b)=>a+b,0),views=[];
+for(const [id,name] of attacks){const card=document.createElement('article'),title=document.createElement('h2'),canvas=document.createElement('canvas'),img=new Image();title.textContent=name;canvas.width=canvas.height=400;card.append(title,canvas);grid.append(card);img.src='assets/optimized/'+id+'-frames-v1.webp';views.push({id,img,ctx:canvas.getContext('2d')});}
+let time=0,last=performance.now(),paused=false;document.getElementById('pause').onclick=e=>{paused=!paused;e.target.textContent=paused?'Продолжить':'Пауза'};
+function tick(now){if(!paused)time+=now-last;last=now;let t=time%(duration+450),frame=0;while(frame<11&&t>=holds[frame])t-=holds[frame++];for(const {id,img,ctx} of views){ctx.clearRect(0,0,400,400);ctx.fillStyle='#3d4b37';ctx.fillRect(0,373,400,27);if(img.complete&&img.naturalWidth&&time%(duration+450)<duration){const w=img.naturalWidth/4,h=img.naturalHeight/3,col=frame%4,row=Math.floor(frame/4),r=EPIC_REGIONS[id],sx=r.cols[col],sy=r.rows[row],sw=r.cols[col+1]-sx,sh=r.rows[row+1]-sy,scale=320/w;ctx.drawImage(img,sx,sy,sw,sh,40+(sx-col*w)*scale,40+(sy-row*h)*scale,sw*scale,sh*scale);}}requestAnimationFrame(tick)}requestAnimationFrame(tick);
+</script></html>

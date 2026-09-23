@@ -5,7 +5,7 @@ const WeaponIcons = require('../weapon-icons.js');
 
 test('every weapon in core TYPES has a dedicated storybook icon', () => {
   const weaponIds = Object.keys(PackCore.TYPES).filter(id => !PackCore.TYPES[id].gear);
-  assert.equal(weaponIds.length, 37, 'There should be 37 weapon types');
+  assert.equal(weaponIds.length, 36, 'The live catalog contains 36 weapons');
 
   for (const id of weaponIds) {
     assert.equal(WeaponIcons.hasIcon(id), true, `Weapon "${id}" must have an icon`);
@@ -31,7 +31,7 @@ test('each weapon has unique vector graphics', () => {
     assert.ok(!bodies.has(body), `Weapon "${id}" must have unique artwork, not a duplicate`);
     bodies.add(body);
   }
-  assert.equal(bodies.size, 37);
+  assert.equal(bodies.size, weaponIds.length);
 });
 
 test('each weapon and gear has a dedicated raster PNG image on disk', () => {
@@ -39,7 +39,7 @@ test('each weapon and gear has a dedicated raster PNG image on disk', () => {
   const path = require('path');
 
   const allIds = [...Object.keys(PackCore.TYPES).filter(id => !PackCore.TYPES[id].gear), 'armor', 'boots', 'chest'];
-  assert.equal(allIds.length, 40);
+  assert.equal(allIds.length, Object.keys(PackCore.TYPES).length+1);
 
   for (const id of allIds) {
     const iconPath = WeaponIcons.getWeaponIconPath(id);
@@ -63,4 +63,3 @@ test('each weapon and gear has a dedicated raster PNG image on disk', () => {
   const atlasWebp = path.join(__dirname, '..', WeaponIcons.ATLAS_WEBP);
   assert.ok(fs.existsSync(atlasWebp), 'Optimized atlas WebP must exist');
 });
-

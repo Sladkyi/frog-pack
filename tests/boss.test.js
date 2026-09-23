@@ -79,6 +79,21 @@ test('Burst ignores armor and Blight stops healing', () => {
   assert.equal(run('shroom.hp'), 9);
 });
 
+test('level 4 stays locked until the mythic stretch, and a temper only pays off in its moment', () => {
+  const run = game();
+  run('progress.cleared=99;startStage(10);state.enemies=[];state.hp=100;state.maxHp=100');
+  run("var a=makeItem('axe',3),b=makeItem('axe',3);a.x=0;a.y=0;b.x=2;b.y=0;state.items.push(a,b);state.loot=[b]");
+  assert.equal(run('itemCap()'), 3);
+  run('selected=b.id;place(a.x,a.y)');
+  assert.equal(run('a.level'), 3);
+  run('startStage(30)');
+  assert.equal(run('itemCap()'), 4);
+  run("var boss=spawnEncounterEnemy({kind:'beetle',boss:true});boss.x=W*.7;boss.speed=0;boss.hp=boss.maxHp=5000;state.enemies=[boss];state.focus=true");
+  run("var plain=makeItem('dagger',3);plain.temper=null;var tuned=makeItem('dagger',3);tuned.temper='focus'");
+  run('strike(boss,100,"#fff",{temper:null});var base=5000-boss.hp;boss.hp=5000;strike(boss,100,"#fff",{temper:"focus"})');
+  assert.ok(run('5000-boss.hp') > run('base'));
+});
+
 test('the chest reveal suspense loop terminates for every rarity', () => {
   const run = game();
   for (const type of ['dagger', 'bow', 'storm', 'orb', 'wand', 'starfall_shard']) {

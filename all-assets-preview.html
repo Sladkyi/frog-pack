@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Frog Pack — вся графика</title>
+<style>
+:root{--bg:#101914;--panel:#1b2a21;--line:#526348;--cream:#f2e6bf;--muted:#a7b39b;--gold:#e2c56f}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 0,#26392c,var(--bg) 45%);color:var(--cream);font:14px system-ui;min-height:100vh}header{position:sticky;top:0;z-index:5;padding:14px 18px;background:#101914ed;backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}h1{font-size:22px;margin:0 0 10px}.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}button,input{font:inherit}button{border:1px solid var(--line);color:var(--cream);background:#26372b;border-radius:10px;padding:8px 12px;cursor:pointer}button.active{border-color:var(--gold);color:#ffe99a;background:#3a4126}input{flex:1;min-width:180px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--cream);background:#152019}main{max-width:1500px;margin:auto;padding:18px}.section{margin:0 0 30px}.section h2{font-size:18px;margin:0 0 12px;color:#ead68f}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}.card{min-width:0;background:linear-gradient(145deg,#213127,#17231c);border:1px solid #40513d;border-radius:15px;overflow:hidden;content-visibility:auto;contain-intrinsic-size:260px}.card[hidden]{display:none}.card h3{font-size:13px;margin:0;padding:10px 12px;border-bottom:1px solid #344537;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.stage{height:210px;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 75%,#405238 0,#28392c 40%,#1b281f 74%);position:relative;overflow:hidden}.stage:after{content:"";position:absolute;left:0;right:0;bottom:16px;height:2px;background:#72815a55}.stage canvas{width:100%;height:100%;position:relative;z-index:1}.meta{display:flex;justify-content:space-between;padding:7px 11px;color:var(--muted);font-size:11px}.weapon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}.weapon{background:#19271f;border:1px solid #40513d;border-radius:15px;padding:11px}.weapon-head{display:flex;justify-content:space-between;gap:8px;margin-bottom:9px}.weapon-head small{color:var(--muted)}.levels{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}.level{aspect-ratio:1;background:#26372b;border:1px solid #4c5d47;border-radius:10px;display:grid;place-items:center;position:relative;overflow:hidden}.level svg,.level img{width:88%;height:88%;object-fit:contain;filter:drop-shadow(0 3px 2px #0007)}.level b{position:absolute;right:5px;bottom:3px;font-size:10px;color:#ffe28a;text-shadow:0 1px #000}.loading{color:var(--muted)}@media(max-width:600px){main{padding:12px}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.stage{height:170px}.weapon-grid{grid-template-columns:1fr}header{padding:10px 12px}}
+</style>
+</head>
+<body><header><h1>Frog Pack · вся графика</h1><a href="fx-demo.html" style="color:#ffe99a;display:inline-block;margin-bottom:12px">Боевой стенд: оружие, уровни, траектории →</a><div class="tools"><button data-tab="all" class="active">Всё</button><button data-tab="weapons">Оружие</button><button data-tab="attacks">Атаки</button><button data-tab="hero">Герой</button><button data-tab="world">Враги и сундук</button><button id="pause">Пауза</button><button id="speed">×1</button><input id="search" placeholder="Найти оружие или анимацию"></div></header><main>
+<section class="section" data-kind="weapons"><h2>Оружие и уровни</h2><div id="weapons" class="weapon-grid"></div></section>
+<section class="section" data-kind="attacks"><h2>Атласы атак · полёт и отдачу смотрите «В бою»</h2><div id="attacks" class="grid"></div></section>
+<section class="section" data-kind="hero"><h2>Герой и броня</h2><div id="hero" class="grid"></div></section>
+<section class="section" data-kind="world"><h2>Враги и сундук</h2><div id="world" class="grid"></div></section>
+</main>
+<script src="fx-atlas-data.js"></script><script src="core.js"></script><script src="weapon-icons.js"></script><script src="assets/epic-frame-regions.js"></script>
+<script>
+const A='assets/optimized/';
+const CELESTIAL_ROWS={
+ 'fire-pillar-frames-v1.webp':[0,362,725,1086],
+ 'ice-lance-frames-v1.webp':[0,367,744,1086],
+ 'thunder-strike-frames-v1.webp':[0,360,723,1086],
+ 'root-eruption-frames-v1.webp':[0,360,730,1086],
+ 'moon-rift-frames-v1.webp':[0,355,719,1086]
+};
+const attacks=[
+['Небесный луч','beam-frames-v2.webp',4,3],['Огненный столп · миф. · резерв','fire-pillar-frames-v1.webp',4,3],['Ледяное копьё · миф. · резерв','ice-lance-frames-v1.webp',4,3],['Грозовой удар · миф.','thunder-strike-frames-v1.webp',4,3],['Взрыв корней · миф. · резерв','root-eruption-frames-v1.webp',4,3],['Лунный разлом · миф. · резерв','moon-rift-frames-v1.webp',4,3],
+['Огненный полумесяц · эпик','epic-fire-crescent-frames-v1.webp',4,3],['Ледяной шип · эпик','epic-ice-spike-frames-v1.webp',4,3],['Электрическая дуга · эпик','epic-spark-arc-frames-v1.webp',4,3],['Удар лозы · эпик · резерв','epic-vine-whip-frames-v1.webp',4,3],['Лунный разрез · эпик · резерв','epic-moon-cut-frames-v1.webp',4,3],
+['Топор','axe-fx-v3.webp',4,3],['Коса','scythe-fx-v4.webp',4,3],['Молот','hammer-fx-v4.webp',6,1],['Кинжал','dagger-fx-v3.webp',6,1],['Сюрикен','shuriken-fx-v2.webp',6,1],['Сфера','orb-fx-v3.webp',6,1],['Гримуар','tome-fx-v4.webp',4,3],['Стрела','seed-bolt-v1.webp',3,2],['Копьё','spear-thrust-v2.webp',3,2],['Бомба и старые снаряды','new-attacks-v1.webp',6,3],['Общие стихии','weapon-frames-v2.webp',6,4],['Общий удар · резерв','slam-frames-v1.webp',4,3],
+['Ледяной скипетр','frost-scepter-fx-v4.webp',4,3],['Грозовой молот','thunder-hammer-fx-v4.webp',4,3],['Святая цепь','holy-flail-fx-v5.webp',4,3],['Кровавый фальшион','blood-falchion-fx-v3.webp',4,3],['Зеркало','astral-mirror-fx-v3.webp',4,3],['Чумное кадило','plague-censer-fx-v2.webp',4,3],['Солнечный лук','solar-bow-fx-v4.webp',4,3],['Копьё дракона · чистый огонь','epic-fire-crescent-frames-v1.webp',4,3],['Моргенштерн хаоса','chaos-flail-fx-v2.webp',4,3],['Лунная глефа','moon-glaive-fx-v2.webp',4,3],['Капкан · зубчатый удар','clockwork-trap-fx-v1.webp',4,3],['Грозовая алебарда','thunder-strike-frames-v1.webp',4,3],
+['Затмение','eclipse-censer-fx-v3.webp',4,3],['Клинок бездны','void-greatsword-fx-v2.webp',4,3],['Колокол конца','doomsday-bell-fx-v2.webp',4,3],['Костяная коса','bone-scythe-fx-v2.webp',4,3],['Феникс','phoenix-lance-fx-v1.webp',4,3],['Око бездны','abyss-eye-fx-v3.webp',4,3],['Демонический топор','demon-fx-v2.webp',4,3],['Копьё духов','spirit-epic-fx-v2.webp',4,3],['Звёздный осколок','starfall-shard-fx-v3.webp',4,3]
+];
+const hero=Array.from({length:5},(_,i)=>[`Герой · броня ${i}`,`frog-armor-${i}.webp`,4,6]);
+const world=[['Враги леса','enemies-v3.webp',4,4],['Дополнительные враги','enemies-v4.webp',4,4],['Сундук: поиск предмета','chest-short-v2.webp',3,2],['Закрытый сундук','chest-closed-v3.webp',1,1]];
+const frames=[],holds=[90,100,130,70,90,100,145,110,100,90,90,130];let paused=false,speed=1,elapsed=0,last=performance.now();
+function animationCard([name,file,cols,rows],host,kind){const card=document.createElement('article');card.className='card';card.dataset.search=(name+' '+file).toLowerCase();card.innerHTML=`<h3>${name}</h3><div class="stage"><span class="loading">ожидание…</span><canvas width="420" height="420"></canvas></div><div class="meta"><span>${cols}×${rows}</span><span>${cols*rows} кадров</span></div>`;host.append(card);const canvas=card.querySelector('canvas'),ctx=canvas.getContext('2d'),img=new Image();const item={card,canvas,ctx,img,cols,rows,kind,loaded:false};frames.push(item);new IntersectionObserver((entries,obs)=>{if(entries[0].isIntersecting){img.onload=()=>{item.loaded=true;card.querySelector('.loading').remove()};img.onerror=()=>card.querySelector('.loading').textContent='нет файла';img.src=A+file;obs.disconnect()}},{rootMargin:'500px'}).observe(card)}
+attacks.forEach(x=>animationCard(x,document.querySelector('#attacks'),'attacks'));hero.forEach(x=>animationCard(x,document.querySelector('#hero'),'hero'));world.forEach(x=>animationCard(x,document.querySelector('#world'),'world'));
+function atlasIcon(file,x,y,w,h,iw,ih){return `<svg viewBox="${x} ${y} ${w} ${h}" preserveAspectRatio="xMidYMid meet"><image href="${A+file}" x="0" y="0" width="${iw}" height="${ih}"/></svg>`}
+function weaponIcon(type,level){
+ const originals=['axe','shuriken','wand','storm','blade'],extra=['bow','spear','bomb','armor','boots'],glyph=['scythe','hammer','orb','dagger','tome'];
+ let row=originals.indexOf(type);if(row>=0){const b=[0,277,536,817,1062,1402],y=b[row];return atlasIcon('evolution-v1.webp',(level-1)*280.5,y,280.5,b[row+1]-y,1122,1402)}
+ row=extra.indexOf(type);if(row>=0){const b=[0,292,560,837,1110,1402],y=b[row];return atlasIcon('equipment-v1.webp',(level-1)*280.5,y,280.5,b[row+1]-y,1122,1402)}
+ row=glyph.indexOf(type);if(row>=0)return atlasIcon('glyph-weapons-v1.webp',(level-1)*216,row*230.4,216,230.4,864,1152);
+ return WeaponIcons.getWeaponIconSvg(type,{size:64});
+}
+Object.entries(PackCore.TYPES).forEach(([id,d])=>{const card=document.createElement('article');card.className='weapon';card.dataset.search=(id+' '+d.name+' '+d.rarity).toLowerCase();card.innerHTML=`<div class="weapon-head"><b>${d.gear?d.name:`<a style="color:inherit" href="fx-demo.html?weapon=${id}">${d.name} ↗ в бою</a>`}</b><small>${d.rarity} · ${d.w}×${d.h}</small></div><div class="levels">${[1,2,3,4].map(l=>`<div class="level">${weaponIcon(id,l)}<b>${l}</b></div>`).join('')}</div>`;weapons.append(card)});
+function draw(item,frame){
+ if(!item.loaded)return;
+ const {ctx,canvas,img,cols,rows,kind}=item,col=frame%cols,row=Math.floor(frame/cols)%rows,file=img.src.split('/').pop().split('?')[0];
+ const nw=img.naturalWidth/cols,nh=img.naturalHeight/rows,ox=col*nw,oy=row*nh;
+ let sx=ox,sy=oy,sw=nw,sh=nh;
+ const measured=FX_ATLAS_DATA[file.replace('.webp','.png')];
+ if(measured&&measured.cols===cols&&measured.rows===rows){[sx,sy,sw,sh]=measured.frames[frame];}
+ else{const epic=file.match(/^epic-(.+)-frames-v1\.webp$/);
+ if(epic&&EPIC_REGIONS['epic-'+epic[1]]){const r=EPIC_REGIONS['epic-'+epic[1]];sx=r.cols[col];sy=r.rows[row];sw=r.cols[col+1]-sx;sh=r.rows[row+1]-sy}
+ else if(CELESTIAL_ROWS[file]){const r=CELESTIAL_ROWS[file];sy=r[row];sh=r[row+1]-sy}}
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ let scale=Math.min(canvas.width/nw,canvas.height/nh)*.82;
+ if(kind==='hero')scale*=1.35;if(kind==='world')scale*=.9;
+ ctx.drawImage(img,sx,sy,sw,sh,(canvas.width-nw*scale)/2+(sx-ox)*scale,(canvas.height-nh*scale)/2+(sy-oy)*scale,sw*scale,sh*scale);
+}
+function loop(now){if(!paused)elapsed+=(now-last)*speed;last=now;for(const item of frames){if(item.card.hidden||item.card.closest('.section').hidden)continue;const rect=item.canvas.getBoundingClientRect();if(rect.bottom<0||rect.top>innerHeight)continue;const count=item.cols*item.rows;let t=elapsed%(holds.reduce((a,b)=>a+b,0)+300),f=0;while(f<count-1&&t>holds[f%holds.length])t-=holds[f++%holds.length];draw(item,f)}requestAnimationFrame(loop)}requestAnimationFrame(loop);
+pause.onclick=()=>{paused=!paused;pause.textContent=paused?'Продолжить':'Пауза'};document.getElementById('speed').onclick=()=>{speed=speed===1?0.5:speed===0.5?2:1;document.querySelector('#speed').textContent='×'+speed};document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.section').forEach(s=>s.hidden=b.dataset.tab!=='all'&&s.dataset.kind!==b.dataset.tab)});search.oninput=()=>{const q=search.value.toLowerCase();document.querySelectorAll('[data-search]').forEach(x=>x.hidden=!x.dataset.search.includes(q))};
+</script></body></html>

@@ -51,7 +51,7 @@ test('healers restore nearby allies, rage triggers once and aura respects its st
   run("state.enemies=[];var rage=spawnEncounterEnemy({kind:'emberBoar'});rage.hp=rage.maxHp*.4;var speed=rage.speed,scale=rage.damageScale;updateCombat(.01);updateCombat(.01)");
   assert.equal(run('rage.speed'),run('speed*1.2'));assert.equal(run('rage.damageScale'),run('scale*1.15'));
   run("state.enemies=[];var drum=spawnEncounterEnemy({kind:'worldHeart'}),friend=spawnEncounterEnemy({kind:'beetle'});drum.x=friend.x=W;drum.speed=0;var startX=friend.x,walkSpeed=friend.speed;updateCombat(.1)");
-  assert.ok(Math.abs(run('startX-friend.x')-run('walkSpeed*.1*1.12'))<1e-8);
+  assert.ok(Math.abs(run('startX-friend.x')-run('walkSpeed*.1*1.12*ENEMY_PACE'))<1e-8);
 });
 
 test('six-level saves migrate without losing stars and unlock level seven',()=>{
@@ -89,6 +89,15 @@ test('procedural stages stay above late-legacy toughness so level 7 is not a one
   // A whole press of a carried axe 4 (every shot) must not one-shot stage-7 scouts.
   assert.ok(run('LEVELS[STAGES[6].firstWave-1].health > (()=>{const a=PackCore.makeItem("axe",4);return PackCore.scaledDamage(a,PackCore.defaultUpgrades())*PackCore.shots(a);})()'));
   assert.ok(run('LEVELS[STAGES[6].firstWave-1].health < LEVELS[STAGES[6].firstWave-1].health * 0 + 700'));
+});
+
+test('level 4 is never a starter kit and opens only from level 31',()=>{
+  const {levelCap,STAGES}=require('../campaign');
+  assert.equal(levelCap(0),3);assert.equal(levelCap(29),3);assert.equal(levelCap(30),4);
+  for(const stage of STAGES){
+    assert.ok(stage.gear.every(([,level])=>level>=1&&level<4),stage.name);
+    if(stage.id>30)assert.ok(stage.gear.every(([,level])=>level<levelCap(stage.id-1)),stage.name);
+  }
 });
 
 test('bags grow and every starter kit still fits',()=>{

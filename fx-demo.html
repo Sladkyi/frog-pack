@@ -24,6 +24,12 @@
   }
   .fx-dock button.on { border-color: #d1f795; color: #d1f795; }
   .fx-dock button.mythic.on { border-color: #f43f5e; color: #fda4af; }
+.fx-tools{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px 4px;color:#ecdfbd}.fx-tools select,.fx-tools button{padding:8px;background:#223629;color:#f4e8c2;border:1px solid #526648;border-radius:7px}.fx-timeline{display:flex;align-items:center;gap:8px;flex:1;min-width:240px}.fx-timeline input{flex:1;min-width:60px}#fx-note{width:100%;margin:0;color:#c0c9ab}.app.phone{max-width:390px;margin:auto}.app.phone .stage{height:340px}.fx-dock{padding-bottom:24px}@media(max-width:600px){.stage{height:340px;min-height:300px}}
+</style>
+<style>
+html,body{height:auto;overflow:auto}.app{padding:0 16px 24px}main{height:auto}.game-layout{display:block}.run-panel{display:flex}.stage-top{position:static;height:34px;padding:0 12px;background:#213027}.stage{width:100%}.fx-tools button,.fx-tools select{min-height:44px}.fx-tools input[type=checkbox]{width:20px;height:20px;vertical-align:middle}
+.fx-dock button{flex:1 1 150px;font-size:12px}.fx-tools{position:relative;background:#101a16}#app-header{position:static;height:48px}.stage-hud{inset:10px 12px auto}.fx-timeline{min-width:100%}
+@media(max-width:700px){.app{padding:0 8px 16px}.stage{height:340px;min-height:260px}.stage-top{padding:0 10px;font-size:12px}.fx-tools{gap:6px;font-size:12px}#fx-note{font-size:11px;line-height:1.5}.fx-dock{gap:6px}.fx-dock button{flex-basis:140px;min-height:48px}}
 </style>
 </head>
 <body><div class="app">
@@ -37,130 +43,17 @@
 <div class="fx-dock" id="fx-dock"></div>
 <section id="level-select" class="level-select" role="dialog" aria-modal="true" aria-label="Level select" hidden><div class="levels-header"><h2>Levels</h2><button id="levels-close" class="icon-button" aria-label="Close levels">×</button></div><div class="levels-pagination"><button id="levels-prev" class="icon-button" aria-label="Previous 10 levels">‹</button><div><b id="levels-world">Forest Paths</b><span id="levels-range">1–10 / 100</span></div><button id="levels-next" class="icon-button" aria-label="Next 10 levels">›</button></div><div id="level-cards" class="level-cards"></div><button id="levels-play" class="primary">Play · 1</button></section>
 </main></div><div id="toast" role="status"></div>
-<script src="assets-manifest.js?v=20260923s"></script>
-<script src="assets-loader.js?v=20260923s"></script>
-<script src="core.js?v=20260923s"></script>
-<script src="weapon-icons.js?v=20260923s"></script>
-<script src="attack-fx.js?v=20260923s"></script>
-<script src="campaign.js?v=20260923s"></script>
-<script src="combat.js?v=20260923s"></script>
-<script src="frog-regions.js?v=20260923s"></script>
-<script src="frog.js?v=20260923s"></script>
-<script src="chest.js?v=20260923s"></script>
-<script src="game.js?v=20260923s"></script>
-<script>
-(function () {
-  const DEMO = Object.keys(PackAttackFx.UNIQUE).filter(id => PackCore.TYPES[id] && !PackCore.TYPES[id].gear);
-  let index = 0;
-  let nextFire = 0;
-  const gameHit = hit;
-  hit = function (enemy, dmg, color, aspect) {
-    const mark = state.texts.length;
-    gameHit(enemy, dmg, color, aspect);
-    state.texts.length = mark;
-  };
-  const gameUpdate = update;
-  update = function (dt) {
-    if (state) {
-      state.hp = state.maxHp;
-      state.mana = state.maxMana;
-      const foe = state.enemies[0];
-      if (foe) { foe.hp = foe.maxHp; foe.speed = 0; }
-    }
-    gameUpdate(dt);
-    if (!state || state.mode !== 'running') return;
-    pinFoe();
-    const shown = PackCore.TYPES[DEMO[index]];
-    if (shown) $('biome').textContent = shown.name;
-    state.hp = state.maxHp;
-    const playing = state.effects.some(fx => fx.life > 0.08)
-      || state.projectiles.some(p => p.life > 0.05)
-      || state.arcs.some(a => a.life > 0.05);
-    if (performance.now() >= nextFire && !playing) {
-      swing();
-      nextFire = performance.now() + 1700;
-    }
-  };
-
-  function pinFoe() {
-    let foe = state.enemies.find(e => e.hp > 0);
-    if (!foe) {
-      spawnEnemy(false);
-      foe = state.enemies.at(-1);
-    }
-    const y = groundY() - H * 0.01;
-    Object.assign(foe, {
-      kind: 'boar', x: W * 0.66, y, baseY: y, size: 36, speed: 0,
-      hp: 1e9, maxHp: 1e9, boss: false, elite: true, attack: 9, barrier: 0
-    });
-    state.enemies = [foe];
-    state.pendingEnemies = [];
-    state.phase = 'combat';
-    state.mode = 'running';
-  }
-
-  function swing() {
-    const item = state.items[0];
-    if (!item) return;
-    state.handFlash = 0;
-    state.mana = state.maxMana;
-    state.cooldowns[item.id] = 0;
-    weaponAttack(item);
-  }
-
-  function arm(i) {
-    index = (i + DEMO.length) % DEMO.length;
-    const type = DEMO[index];
-    const item = PackCore.makeItem(type, 4);
-    item.x = 0;
-    item.y = 0;
-    state.items = [item];
-    state.heldId = item.id;
-    state.effects = [];
-    state.arcs = [];
-    state.projectiles = [];
-    state.cooldowns = {};
-    state.handFlash = 0;
-    state.phase = 'combat';
-    state.mode = 'running';
-    pinFoe();
-    const def = PackCore.TYPES[type];
-    $('biome').textContent = def.name;
-    const rank = def.rarity === 'mythic' ? 'MYTHIC' : def.rarity === 'legendary' ? 'LEGENDARY' : def.rarity === 'epic' ? 'EPIC' : def.rarity === 'rare' ? 'RARE' : def.name;
-    announce(rank);
-    document.querySelectorAll('#fx-dock button').forEach((btn, n) => btn.classList.toggle('on', n === index));
-    swing();
-    nextFire = performance.now() + 1700;
-    if (typeof renderInventory === 'function') renderInventory();
-    if (typeof updateUI === 'function') updateUI();
-  }
-
-  function boot() {
-    Object.values(legendFx).forEach(requestAsset);
-    requestAsset(slamFrames);
-    requestAsset(scythe12Fx);
-    requestAsset(thunderHalberdFx);
-    requestAsset(enemyAtlas);
-    requestAsset(forest);
-    warmGameAssets();
-    const ready = Object.values(legendFx).every(img => img.complete && img.naturalWidth) && enemyAtlas.complete && enemyAtlas.naturalWidth;
-    if (!ready) { setTimeout(boot, 120); return; }
-    $('overlay').classList.add('hidden');
-    $('game-layout').inert = false;
-    const dock = $('fx-dock');
-    DEMO.forEach((type, i) => {
-      const def = PackCore.TYPES[type];
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = def.rarity === 'mythic' ? 'mythic' : '';
-      btn.textContent = def.name;
-      btn.onclick = () => arm(i);
-      dock.append(btn);
-    });
-    arm(0);
-    setInterval(() => arm(index + 1), 5200);
-  }
-  boot();
-})();
-</script>
+<script src="assets-manifest.js?v=20260923feel3"></script>
+<script src="assets-loader.js?v=20260923feel3"></script>
+<script src="core.js?v=20260923feel3"></script>
+<script src="weapon-icons.js?v=20260923feel3"></script>
+<script src="attack-fx.js?v=20260923feel3"></script>
+<script src="campaign.js?v=20260923feel3"></script>
+<script src="fx-atlas-data.js?v=20260923feel3"></script>
+<script src="combat.js?v=20260923feel3"></script>
+<script src="frog-regions.js?v=20260923feel3"></script>
+<script src="frog.js?v=20260923feel3"></script>
+<script src="chest.js?v=20260923feel3"></script>
+<script src="game.js?v=20260923feel3"></script>
+<script src="fx-demo.js?v=20260923feel3"></script>
 </body></html>

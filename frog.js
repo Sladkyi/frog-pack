@@ -21,7 +21,7 @@ const FROG_HANDS=[
 // Squash before the throw, stretch on release, recoil and settle: weight on top of the attack cels.
 function frogAttackPose(){
   if(state.phase!=='combat'||!(state.handFlash>0))return null;
-  const t=.78-state.handFlash,ease=k=>1-(1-k)**3;
+  const t=HERO_ATTACK_DURATION-state.handFlash,ease=k=>1-(1-k)**3;
   let sy=1;
   if(t<.06)sy=1-.08*(t/.06);
   else if(t<.16)sy=.92+.16*ease((t-.06)/.1);
@@ -29,11 +29,11 @@ function frogAttackPose(){
   const recoil=t>=.06&&t<.3?-Math.sin(Math.PI*(t-.06)/.24)*4:0;
   return {sx:1+(1-sy)*.6,sy,dx:recoil*castScale()};
 }
-function renderFrogHero(){
+function renderFrogHero(transition=null){
   let level=frogArmorLevel(),sheet=frogSheets[level];
   if(!sheet.complete||!sheet.naturalWidth){level=0;sheet=frogSheets[0];}
   if(!sheet.complete||!sheet.naturalWidth)return false;
-  const frame=frogFrame(),sw=sheet.naturalWidth/4,sh=sheet.naturalHeight/6;
+  const frame=transition?.frame??frogFrame(),sw=sheet.naturalWidth/4,sh=sheet.naturalHeight/6;
   const sx=(frame%4)*sw,sy=Math.floor(frame/4)*sh;
   const [rx,ry,rw,rh]=FROG_REGIONS[level][frame];
   const size=128*castScale(),ground=groundY(),left=W*.27-size*.58;
@@ -44,6 +44,7 @@ function renderFrogHero(){
   ellipse(W*.27,ground+3,size*.24,3.5,'#10251d55');
   const pose=frogAttackPose();
   ctx.save();
+  if(transition){ctx.translate(W*.27+(transition.dx||0),ground);ctx.scale(transition.scale||1,transition.scale||1);ctx.translate(-W*.27,-ground);}
   if(pose&&typeof ctx.scale==='function'){ctx.translate(W*.27+pose.dx,ground);ctx.scale(pose.sx,pose.sy);ctx.translate(-W*.27,-ground);}
   ctx.drawImage(sheet,rx,ry,rw,rh,left+(rx-sx)*unit,top+(ry-sy)*unit,rw*unit,rh*unit);
   const [hx,hy]=FROG_HANDS[frame];

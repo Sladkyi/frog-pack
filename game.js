@@ -267,6 +267,7 @@ function reset(stageIndex=0, opts={}) {
   const stats = PackCore.upgradeStats(progress.upgrades);
   state = { mode: 'ready', stageIndex, damageTaken:0, completedLevels:offset, bagSize:stage.bag, distance:offset*LEG_DISTANCE, hp:stats.maxHp, maxHp:stats.maxHp, mana:stats.maxMana, maxMana:stats.maxMana, kills:0, items, loot:[], nextLoot:(offset+1)*LEG_DISTANCE, stops:offset, enemies:[], projectiles:[], particles:[], texts:[], arcs:[], cooldowns:{}, spawn:.4, shake:0, flash:0, bossSpawned:false, currentBiome:startBiome, targetBiome:startBiome, biomeBlend:0 };
   state.entryBag = cloneBag(items);
+  state.capRanks = 0;
   state.lootSeed = Math.floor(Math.random() * 4294967296) >>> 0; state.lootPity = lootPity;
   state.poseTime = 0; state.runTime = 0; state.stopAge = STOP_DURATION; state.phase = 'combat'; state.wave = offset; state.waveTotal = 0; state.phaseTime = 0; state.effects = []; state.pendingEnemies=[];state.encounterTime=0;state.handFlash = 0; state.heldId = held.id; selected = null;
   if (!opts.carry) carryBag = null;
@@ -287,7 +288,19 @@ const canBuzz = typeof navigator !== 'undefined' && typeof navigator.vibrate ===
 function buzz(pattern) { if (canBuzz) try { navigator.vibrate(pattern); } catch (_) {} }
 function select(id) { selected = id; if (state.items.some(i => i.id === id && !TYPES[i.type].gear)) state.heldId = id; renderInventory(); renderLoot(); }
 function selectedItem() { return [...state.items, ...state.loot].find(i => i.id === selected); }
-function matching(item) { return state.items.find(i => i.id !== item.id && i.type === item.type && i.level === item.level && i.level < 4); }
+function itemCap() { return (typeof PackCampaign !== 'undefined' && PackCampaign.levelCap) ? PackCampaign.levelCap(state.stageIndex || 0) : 4; }
+function matching(item) { return state.items.find(i => i.id !== item.id && i.type === item.type && i.level === item.level && i.level < itemCap() && i.level < 4); }
+function applyTune(item) {
+  const host = state.items.filter(i => i.type === item.type && !TYPES[i.type].gear).sort((a, b) => b.level - a.level)[0];
+  if (!host || !item.temper) return false;
+  host.temper = item.temper;
+  state.loot = state.loot.filter(i => i.id !== item.id);
+  selected = host.id;
+  const hint = (typeof TEMPER_HINT !== 'undefined' && TEMPER_HINT[item.temper]) || '';
+  toast(`${TYPES[host.type].name} · ${item.temper.toUpperCase()}${hint ? ' — ' + hint : ''}`);
+  beep(520, .12); renderInventory(); renderLoot();
+  return true;
+}
 function availablePair() {
   const current = selectedItem();
   if (current && matching(current)) return [current, matching(current)];
@@ -296,6 +309,7 @@ function availablePair() {
 }
 function quickTake(id) {
   const item = state.loot.find(i => i.id === id); if (!item) return;
+  if (item.tune) { applyTune(item); return; }
   selected = id; const target = matching(item);
   if (target) { place(target.x, target.y); return; }
   for (let rotation = 0; rotation < 2; rotation++) {
@@ -317,7 +331,7 @@ function bindDrag(button, item) {
     const x = Math.round((left - rect.left) / stepX), y = Math.round((top - rect.top) / stepY);
     const inGrid = e.clientX >= rect.left && e.clientX < rect.right && py >= rect.top && py < rect.bottom;
     const target = state.items.find(i => x >= i.x && x < i.x + i.w && y >= i.y && y < i.y + i.h);
-    const combines = target && target.id !== item.id && target.type === item.type && target.level === item.level && item.level < 4;
+    const combines = target && target.id !== item.id && target.type === item.type && target.level === item.level && item.level < itemCap() && item.level < 4;
     return { rect, gap, stepX, stepY, cw, ch, width, height, left, top, x, y, inGrid, combines, valid: combines || canPlace(state.items, item, x, y), target };
   }
   button.onpointerdown = e => {
@@ -374,7 +388,7 @@ function renderInventory() {
   state.items.forEach(item => {
     const d = TYPES[item.type], b = document.createElement('button');
     const rarity = PackCore.RARITIES[d.rarity] || PackCore.RARITIES.common;
-    const canMerge = [...state.items, ...state.loot].some(i => i.id !== item.id && i.type === item.type && i.level === item.level && item.level < 4);
+    const canMerge = [...state.items, ...state.loot].some(i => i.id !== item.id && i.type === item.type && i.level === item.level && item.level < itemCap() && item.level < 4);
     const live = d.gear
       ? state.items.some(i => i.id !== item.id && !TYPES[i.type].gear && PackCore.edgeTouch(item, i))
       : PackCore.linkMul(state.items, item, bagSize()) >= 1;
@@ -388,7 +402,7 @@ function renderInventory() {
     b.onclick = () => {
       if (Date.now() < suppressClickUntil) return;
       const active = selectedItem();
-      if (active && active.id !== item.id && active.type === item.type && active.level === item.level && item.level < 4) place(item.x, item.y);
+      if (active && active.id !== item.id && active.type === item.type && active.level === item.level && item.level < itemCap() && item.level < 4) place(item.x, item.y);
       else select(selected === item.id ? null : item.id);
     };
     bindDrag(b, item); inv.append(b);
@@ -416,8 +430,9 @@ function renderInventory() {
   const roleLine = role ? ` <b class="role-rule">${role.name}: ${role.counter}.</b> ${role.hint}.` : '';
   const cost = role ? ` · ✦${PackCore.manaCost(current, progress.upgrades)}` : '';
   const spareLine = current && spare.has(current.id) ? ` <b class="spare-rule">Spare: only the best copy ${curDef.gear ? 'counts' : 'fires'}. Merge it or drop it.</b>` : '';
+  const temperLine = current?.temper && typeof TEMPER_HINT !== 'undefined' ? ` <b class="temper-rule">${current.temper.toUpperCase()}: ${TEMPER_HINT[current.temper]}.</b>` : '';
   const stats = role && state.items.includes(current) ? `<span class="item-stats">${pressStats(current)}</span>` : '';
-    $('item-detail').innerHTML = current ? `<b style="color:${curRarity.color}">${curDef.name} · lv. ${current.level}</b><span class="rarity-detail" style="color:${curRarity.color}">${curRarity.name}${role ? ' · ' + role.name : ''} · ${current.w}×${current.h}${cost}</span>${stats}<p>${curDef.descriptions[current.level - 1]}${spareLine}${roleLine}${aspectLine}${formation}</p>` : '';
+    $('item-detail').innerHTML = current ? `<b style="color:${curRarity.color}">${curDef.name} · lv. ${current.level}</b><span class="rarity-detail" style="color:${curRarity.color}">${curRarity.name}${role ? ' · ' + role.name : ''} · ${current.w}×${current.h}${cost}</span>${stats}<p>${curDef.descriptions[current.level - 1]}${temperLine}${spareLine}${roleLine}${aspectLine}${formation}</p>` : '';
 }
 // Only the best copy of a type fires (weapons) or applies (gear); everything else is dead weight in the bag.
 function spareItems() {
@@ -463,11 +478,11 @@ function renderLoot() {
     const d = TYPES[item.type], b = document.createElement('button'), target = matching(item);
     const rarity = PackCore.RARITIES[d.rarity] || PackCore.RARITIES.common;
     const owned = state.items.some(i => i.type === item.type);
-    const tag = target ? 'Merge' : owned ? 'Spare' : (d.gear ? 'Gear' : 'New');
-    b.className = `loot-card rarity-${d.rarity || 'common'}${selected === item.id ? ' selected' : ''}${target ? ' upgrade' : ''}${!target && owned ? ' spare' : ''}`;
+    const tag = item.tune ? 'Temper' : target ? 'Merge' : owned ? 'Spare' : (d.gear ? 'Gear' : 'New');
+    b.className = `loot-card rarity-${d.rarity || 'common'}${selected === item.id ? ' selected' : ''}${target ? ' upgrade' : ''}${item.tune ? ' temper' : ''}${!item.tune && !target && owned ? ' spare' : ''}`;
     b.style.setProperty('--rarity-color', rarity.color);
     b.innerHTML = `${icon(item.type,item.level)}<div><b style="color:${rarity.color}">${d.name}</b><small style="color:${rarity.color}">${tag}</small></div><span class="tier" style="color:${rarity.color}">${'◆'.repeat(item.level)}</span>`;
-    b.setAttribute('aria-label', `${d.name}: ${target ? 'drag onto its pair to merge' : 'drag into the backpack'}`);
+    b.setAttribute('aria-label', item.tune ? `${d.name}: temper ${item.temper}` : `${d.name}: ${target ? 'drag onto its pair to merge' : 'drag into the backpack'}`);
     b.onclick = () => { if (Date.now() >= suppressClickUntil) select(selected === item.id ? null : item.id); }; bindDrag(b, item); tray.append(b);
   });
   $('loot-heading').textContent = state.mode === 'loot' ? 'Pick one' : state.phase === 'combat' ? 'Fighting the pack' : state.phase === 'chest' ? 'Rummaging the chest…' : 'To the next chest';
@@ -480,8 +495,19 @@ function renderLoot() {
 function place(x, y) {
   const item = selectedItem(); if (!item) return;
   const target = state.items.find(i => x >= i.x && x < i.x + i.w && y >= i.y && y < i.y + i.h);
+  if (item.tune) {
+    if (target && target.type === item.type) { applyTune(item); return; }
+    toast('Tap it to temper the weapon you already have'); return;
+  }
   if (target && target.id !== item.id) {
+    if (item.type === target.type && item.level === target.level && target.level + 1 > itemCap()) {
+      toast(itemCap() < 4 ? `Level ${itemCap() + 1} opens on a later stage` : 'Max level'); return;
+    }
+    if (item.type === target.type && item.level === target.level && target.level + 1 === itemCap() && state.capRanks >= 1) {
+      toast('One new top rank per stage. Temper the rest.'); return;
+    }
     if (merge(state.items, item, target)) {
+      if (target.level === itemCap()) state.capRanks = (state.capRanks || 0) + 1;
       state.loot = state.loot.filter(i => i.id !== item.id); selected = target.id; mergedId = target.id; setTimeout(() => { mergedId = null; }, 600); state.flash = .75; state.shake = 5; state.cooldowns[target.id] = 0;
       burst(W * .27, H * .73, TYPES[target.type].color, 50, 160); announce(`${TYPES[target.type].name} · LEVEL ${target.level}`);
       beep(440, .14); setTimeout(() => beep(660, .2), 90); setTimeout(() => beep(880, .4), 190); buzz([14, 50, 14, 50, 30]);
@@ -509,7 +535,7 @@ $('discard').onclick = () => {
 function lootStop() {
   state.stopAge = state.phase === 'travel' ? 0 : STOP_DURATION; state.handFlash = 0;
   state.mode = 'loot'; state.phase = 'loot'; state.stops++;
-  state.hp=Math.min(state.maxHp||100,state.hp+18);
+  state.hp=Math.min(state.maxHp||100,state.hp+10);
   state.mana=Math.min(state.maxMana||100,(state.mana||0)+35);
   state.loot = chooseChestLoot(state.stops, state.chestReward); state.chestReward=null; state.poseTime=0;
   selected = state.loot[0].id; renderInventory(); renderLoot(); updateUI();
@@ -529,18 +555,26 @@ function lootStop() {
 $('continue').onclick = () => { if (state.mode !== 'loot') return; state.loot = []; selected = null; state.nextLoot = state.distance + LEG_DISTANCE; renderInventory(); leaveChest(); };
 function showOverlay(title, text, button, hint) { $('overlay').classList.remove('is-menu'); $('overlay-title').textContent = title; $('overlay-text').innerHTML = text; $('start').innerHTML = `${button} <span>→</span>`; $('overlay-hint').textContent = hint; $('overlay').classList.remove('hidden'); }
 function showMenu(){ showOverlay('Frog Pack', `Level ${state.stageIndex+1}`, 'PLAY', ''); $('overlay').classList.add('is-menu'); }
-let bootShownAt=0;
+let bootFinished=false, bootPendingAt=0, bootProgress=0;
 function paintBoot(){
   const boot=$('boot'); if(!boot) return;
-  if(!bootShownAt) bootShownAt=Date.now();
+  const now=Date.now();
+  const waiting=state.loadingAssets||state.assetError;
+  if(waiting&&!bootPendingAt){bootPendingAt=now;bootProgress=0;}
   const images=sceneAssets();
   const total=Math.max(1, images.length);
   const done=images.filter(img=>img.complete&&img.naturalWidth>0).length;
+  bootProgress=Math.max(bootProgress,Math.round(done/total*100));
   const fill=$('boot-fill');
-  if(fill) fill.style.width=`${Math.round(done/total*100)}%`;
-  const ready=!state.loadingAssets&&!state.assetError&&Date.now()-bootShownAt>=700;
-  boot.classList.toggle('is-done', ready);
-  boot.setAttribute('aria-hidden', ready?'true':'false');
+  if(fill) fill.style.width=`${bootProgress}%`;
+  const visible=waiting&&(!bootFinished||state.assetError||now-bootPendingAt>250);
+  boot.classList.toggle('is-compact',bootFinished);
+  boot.classList.toggle('is-error',!!state.assetError);
+  boot.classList.toggle('is-done',!visible);
+  boot.setAttribute('aria-hidden',visible?'false':'true');
+  $('boot-status').textContent=state.assetError?'Could not load · refresh to retry':bootFinished?'Packing your find…':'Packing for adventure…';
+  $('boot-percent').textContent=state.assetError?'!':`${bootProgress}%`;
+  if(!waiting){bootFinished=true;bootPendingAt=0;}
 }
 function pause() {
   if(menuReturnMode!==null)return;
@@ -738,7 +772,10 @@ function updateAttackButtons(){
    const aspectName=TYPES[item.type].aspect?`, ${ASPECT_LABEL[TYPES[item.type].aspect]}`:'';
    button.title=`${TYPES[item.type].name} · ${role.name}: ${role.counter} · ✦${cost}`;
    button.setAttribute('aria-label',`${TYPES[item.type].name}${aspectName}, ${role.name}, level ${item.level}, mana ${cost}`);
-   button.onclick=()=>{manualAttack(item.id);updateAttackButtons();};
+   // Fire on contact, rather than waiting for the finger to lift. The click
+   // remains for keyboard/assistive activation and is suppressed after touch.
+   button.onpointerdown=e=>{if(e.pointerType!=='touch'||button.disabled||bar.scrollWidth>bar.clientWidth+2)return;e.preventDefault();button.touchFiredAt=Date.now();if(manualAttack(item.id)){button.classList.remove('fired');void button.offsetWidth;button.classList.add('fired');}updateAttackButtons();};
+   button.onclick=()=>{if(Date.now()-(button.touchFiredAt||0)<650)return;if(manualAttack(item.id)){button.classList.remove('fired');void button.offsetWidth;button.classList.add('fired');}updateAttackButtons();};
    bar.append(button);bar.attackButtons.push({button,timer,item});
   }
  }
@@ -755,6 +792,7 @@ function updateAttackButtons(){
   const cd=Math.max(0,state.cooldowns[item.id]||0),total=TYPES[item.type].cooldown/PackCore.hasteFor(state.items,item);
   const cost=PackCore.manaCost(item,progress.upgrades),lowMana=(state.mana||0)<cost;
   button.disabled=state.mode!=='running'||state.phase!=='combat'||cd>0||state.attackLock>0||state.loadingAssets||lowMana;
+  const ready=!button.disabled;button.classList.toggle('just-ready',ready&&button.wasCooling);button.wasCooling=cd>0;
   button.classList.toggle('no-mana',lowMana&&cd<=0);
   button.classList.toggle('nudge',nudge&&!button.disabled);
   button.style.setProperty('--cooldown',`${Math.min(100,cd/total*100)}%`);
@@ -821,7 +859,7 @@ function drawCorpses() {
     ctx.beginPath(); ctx.ellipse(c.x, ground, c.size * (.6 + 1.8 * t) * s, c.size * (.18 + .4 * t) * s, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
   }
 }
-function hit(enemy, dmg, color, aspect, role) {
+function hit(enemy, dmg, color, aspect, role, temper) {
   if (enemy.hp <= 0) return;
   let crit = false;
   if (aspect && enemy.aspect) {
@@ -837,16 +875,20 @@ function hit(enemy, dmg, color, aspect, role) {
   if(kind?.shield&&(enemy.age||0)%5<1.6)dmg=Math.max(1,Math.round(dmg*.4));
   if(enemy.stun>0){dmg=Math.round(dmg*STAGGER_VULN);crit=true;}
   if(role==='dot')enemy.blight=BLIGHT_TIME;
-  if(enemy.windup>0){enemy.windupDmg=(enemy.windupDmg||0)+dmg*(role==='burst'?BURST_STAGGER:1);checkStagger(enemy);}
+  if(enemy.windup>0){enemy.windupDmg=(enemy.windupDmg||0)+dmg*(role==='burst'?BURST_STAGGER:1)*(temper==='break'?1.5:1);checkStagger(enemy);}
   enemy.hp -= dmg;
   const killed=enemy.hp<=0;
-  enemy.hit = killed?.38:.28;
+  enemy.hit = killed?.38:.13;
   burst(enemy.x, enemy.y - enemy.size, color, killed?(enemy.boss?80:22):10, killed?150:110);
   state.shake=Math.max(state.shake||0, killed?(enemy.boss?12:7):2.5);
   state.flash=Math.max(state.flash||0, killed?.28:.08);
-  const textSize = Math.max(12, Math.round(Math.min(30, 15 + Math.log10(dmg+1)*8) * castScale() * (crit ? 1.25 : 1)));
-  state.texts.push({ x: enemy.x + (Math.random() - .5) * 16, y: enemy.y - enemy.size * 2, text: dmg, life: killed?1.2:.95, color, size: textSize, pop: killed, crit,
-    age: 0, vx: (Math.random() - .5) * 40, vy: killed ? -120 : -85 });
+  const textSize = Math.max(12, Math.round(Math.min(25, 14 + Math.log10(dmg+1)*5) * castScale() * (crit ? 1.25 : 1)));
+  // Consecutive ticks build one number instead of hiding the foe under a stack.
+  const recent=state.texts.find(t=>t.enemy===enemy&&t.age<.32&&!t.pop);
+  const textJitter=(Math.random()-.5)*12,textVelocity=(Math.random()-.5)*24;
+  if(recent){recent.text+=dmg;recent.life=killed?1:.7;recent.pop=killed;recent.crit=recent.crit||crit;recent.color=color;}
+  else state.texts.push({ enemy,x: enemy.x + textJitter, y: enemy.y - enemy.size * 2, text: dmg, life: killed?1.1:.75, color, size: textSize, pop: killed, crit,
+    age: 0, vx: textVelocity, vy: killed ? -100 : -65 });
   if (killed) spawnCorpse(enemy);
   if (!killed && enemy.boss && !enemy.almost && enemy.hp < enemy.maxHp * .2) { enemy.almost = true; announce('ALMOST!'); beep(330, .1, 'square', .025); }
   if (killed) { enemy.aspectLock = null; state.kills++; registerKill(enemy); state.mana=Math.min(state.maxMana||100,(state.mana||0)+(enemy.boss?0:enemy.elite?ELITE_KILL_MANA:KILL_MANA)); beep(120 + Math.random() * 100 + (state.combo?.count || 0) * 18, .045, 'triangle', .018);
@@ -873,6 +915,7 @@ function update(dt) {
   for (const a of state.arcs) a.life -= dt;
   state.particles = state.particles.filter(p => p.life > 0); state.texts = state.texts.filter(t => t.life > 0); state.arcs = state.arcs.filter(a => a.life > 0);
   state.flash = Math.max(0, state.flash - dt); state.shake = Math.max(0, state.shake - dt * 25);
+  state.impactCooldown=Math.max(0,(state.impactCooldown||0)-dt);
   if (state.combo) state.combo.pop = Math.max(0, state.combo.pop - dt * 5);
   state.frenzy = Math.max(0, (state.frenzy || 0) - dt);
   if (inDanger()) { state.heartbeat = (state.heartbeat || 0) - dt; if (state.heartbeat <= 0) { state.heartbeat = .5 + state.hp / state.maxHp * 1.6; beep(58, .09, 'sine', .06); setTimeout(() => beep(52, .12, 'sine', .05), 130); } }
@@ -1070,6 +1113,15 @@ function bossBarColor(e) {
   return e.hp < e.maxHp * .2 && Math.sin(time * 18) > 0 ? '#ff5a4a' : '#efac7e';
 }
 function enemyDraw(e) {
+  ctx.save();
+  if(e.hit>0&&!e.corpse){
+    const k=Math.max(0,Math.min(1,e.hit/.13)),kick=Math.sin(k*Math.PI*.8);
+    ctx.translate(e.x+kick*(e.boss?2:5)*castScale(),e.y);
+    ctx.scale(1-kick*.08,1+kick*.045);ctx.translate(-e.x,-e.y);
+  }
+  enemyArt(e);ctx.restore();
+}
+function enemyArt(e) {
   const y = e.y + Math.sin(time * 5 + e.phase) * 2, s = e.size; ellipse(e.x, e.y + 5, s * 1.1, s * .22, '#10251d66');
   const kind=ENEMY_KINDS[e.kind];
   if(!e.corpse&&(e.barrier>0||kind?.healer||kind?.aura||e.enraged)){
@@ -1137,12 +1189,12 @@ function projectileDraw(p) {
   if(p.type==='shuriken'){ctx.rotate(time*19+p.phase);const s=7+p.level;poly([[0,-s],[3,-3],[s,0],[3,3],[0,s],[-3,3],[-s,0],[-3,-3]],p.color);}
   if(p.type==='axe'){ctx.rotate(time*12+p.phase);ctx.fillStyle='#b99569';ctx.fillRect(-2,-13,4,27);poly([[-3,-12],[11,-11],[16,0],[0,5]],p.color);}
   if(p.type==='wand'){ellipse(0,0,5+p.level,5+p.level,p.color);ellipse(-1,-1,3,3,'#fff4ff');}
-  if(p.type==='blade' && weaponFrames.complete && weaponFrames.naturalWidth){const f=Math.min(3,Math.floor((2.5-p.life)*10));const size=(35+p.level*16)*castScale();drawCel(weaponFrames,f,1,6,4,0,size/2,size,size);ctx.restore();return;}
+  if(p.type==='blade' && weaponFrames.complete && weaponFrames.naturalWidth){const f=Math.min(2,Math.floor((2.5-p.life)*10));const size=(26+p.level*6)*castScale();drawCel(weaponFrames,f,1,6,4,0,size/2,size,size);ctx.restore();return;}
   if(p.type==='blade'){ctx.lineWidth=3+p.level;ctx.beginPath();ctx.arc(-13,0,17+p.level*4,-1.1,1.1);ctx.stroke();}
   ctx.restore();
 }
 function render() {
-  ctx.save();if(state.shake>0)ctx.translate((Math.random()-.5)*state.shake,(Math.random()-.5)*state.shake);background();renderWorldChest();
+  ctx.save();if(state.shake>0)ctx.translate(Math.sin(time*77)*state.shake*.32*castScale(),Math.sin(time*93+.7)*state.shake*.18*castScale());background();renderWorldChest();
   drawCorpses();state.enemies.forEach(enemyDraw);hero();state.projectiles.forEach(projectileDraw);renderCombatEffects();
 
   state.particles.forEach(p=>{ctx.globalAlpha=Math.min(1,p.life*2);ctx.fillStyle=p.color;ctx.fillRect(p.x,p.y,p.size,p.size);});ctx.globalAlpha=1;
@@ -1193,7 +1245,18 @@ function drawCombo(){
   for(let i=0;i<FRENZY_AT;i++){ctx.fillStyle=i<into?'#ffd86b':'#ffffff33';ctx.fillRect(left+i*gap+1,by+8,gap-3,3);}
   ctx.restore();
 }
-function resize() {const rect=canvas.getBoundingClientRect(),oldW=W,oldH=H;W=rect.width;H=rect.height;const dpr=Math.min(window.devicePixelRatio||1,2);canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);if(state&&oldW&&oldH){const sx=W/oldW,sy=H/oldH;/* Mobile URL bars and bag-size changes resize mid-fight: keep lanes and flight heights proportional. */for(const e of [...state.enemies,...(state.corpses||[])]){e.x*=sx;e.y*=sy;if(e.baseY!=null)e.baseY*=sy;if(e.baseX!=null)e.baseX*=sx;}state.projectiles.forEach(p=>{p.x*=sx;p.y*=sy;});}}
+function resize() {
+ const rect=canvas.getBoundingClientRect(),oldW=W,oldH=H;W=rect.width;H=rect.height;
+ const dpr=Math.min(window.devicePixelRatio||1,2);canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+ if(!state||!oldW||!oldH)return;
+ const sx=W/oldW,sy=H/oldH;
+ const move=(obj,xKeys,yKeys)=>{for(const k of xKeys)if(Number.isFinite(obj[k]))obj[k]*=sx;for(const k of yKeys)if(Number.isFinite(obj[k]))obj[k]*=sy;};
+ for(const e of [...state.enemies,...(state.corpses||[])])move(e,['x','baseX'],['y','baseY']);
+ for(const p of state.projectiles)move(p,['x'],['y']);
+ for(const fx of state.effects||[]){move(fx,['x','fromX','impactX'],['y','fromY','impactY']);if(fx.fly)move(fx.fly,['x'],['y']);}
+ for(const arc of state.arcs)move(arc,['x','ex'],['y','ey']);
+ for(const p of [...state.particles,...state.texts])move(p,['x'],['y']);
+}
 new ResizeObserver(resize).observe(canvas);
 // Hitstop freezes the world for a few frames on a kill; slowmo stretches the last blow of a wave.
 function frame(now) {

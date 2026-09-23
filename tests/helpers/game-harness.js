@@ -16,7 +16,7 @@ function game(realLoading=false, storage=new Map()) {
   const sandbox = { console, Math: math, Image: class { complete = false; }, setTimeout: () => 1, clearTimeout() {}, requestAnimationFrame() {}, ResizeObserver: class { observe() {} }, localStorage: { getItem: key => storage.get(key) ?? null, setItem(key,value) { storage.set(key,value); } }, document: { getElementById(id) { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); }, createElement: element, addEventListener() {}, activeElement: { tagName: 'BODY' } }, window: { addEventListener() {}, devicePixelRatio: 1 } };
   const context = vm.createContext(sandbox);
   sandbox.document.body = element(); sandbox.getComputedStyle = () => ({ gap: '4px' });
-  for(const f of ['assets-manifest.js','assets-loader.js'])vm.runInContext(fs.readFileSync(path.join(root,f), 'utf8'), context);
+  for(const f of ['assets-manifest.js','assets-loader.js','fx-atlas-data.js'])vm.runInContext(fs.readFileSync(path.join(root,f), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(root, 'core.js'), 'utf8'), context);
   sandbox.PackCore = sandbox.window.PackCore;
   vm.runInContext(fs.readFileSync(path.join(root, 'attack-fx.js'), 'utf8'), context);

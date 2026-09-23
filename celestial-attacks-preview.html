@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Пять новых атак</title>
+<style>body{margin:0;background:#18231d;color:#f1e4b8;font:16px system-ui;padding:20px}h1{font-size:23px}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}article{background:#2c3a2e;border:1px solid #65714b;border-radius:16px;overflow:hidden}h2{font-size:17px;margin:14px}canvas{width:100%;display:block}button{background:#d8c778;border:0;border-radius:8px;padding:10px 20px;margin-bottom:20px;cursor:pointer}</style>
+<h1>Пять новых атак</h1><button id="pause">Пауза</button><main id="grid"></main>
+<script>
+const attacks=[['fire-pillar','Огненный столп'],['ice-lance','Ледяное копьё'],['thunder-strike','Грозовой удар'],['root-eruption','Взрыв корней'],['moon-rift','Лунный разлом']];
+// Measured row boundaries and ground anchors: generated atlases are not exact grids.
+const regions={
+ 'fire-pillar':{rows:[0,362,725,1086],ground:[351,713,1067]},
+ 'ice-lance':{rows:[0,367,744,1086],ground:[364,739,1063]},
+ 'thunder-strike':{rows:[0,360,723,1086],ground:[350,713,1070]},
+ 'root-eruption':{rows:[0,360,730,1086],ground:[355,724,1056]},
+ 'moon-rift':{rows:[0,355,719,1086],ground:[346,709,1057]}
+};
+const holds=[100,100,140,65,85,90,140,100,90,100,110,150],duration=holds.reduce((a,b)=>a+b,0),views=[];
+for(const [id,name] of attacks){const card=document.createElement('article'),title=document.createElement('h2'),canvas=document.createElement('canvas'),img=new Image();title.textContent=name;canvas.width=canvas.height=400;card.append(title,canvas);grid.append(card);img.src='assets/optimized/'+id+'-frames-v1.webp';views.push({id,img,ctx:canvas.getContext('2d')});}
+let time=0,last=performance.now(),paused=false;document.getElementById('pause').onclick=e=>{paused=!paused;e.target.textContent=paused?'Продолжить':'Пауза'};
+function tick(now){if(!paused)time+=now-last;last=now;let t=time%(duration+450),frame=0;while(frame<11&&t>=holds[frame])t-=holds[frame++];for(const {id,img,ctx} of views){ctx.clearRect(0,0,400,400);ctx.fillStyle='#3d4b37';ctx.fillRect(0,373,400,27);if(img.complete&&img.naturalWidth&&time%(duration+450)<duration){const w=img.naturalWidth/4,row=Math.floor(frame/4),region=regions[id],sy=region.rows[row],h=region.rows[row+1]-sy,scale=400/w;ctx.drawImage(img,(frame%4)*w,sy,w,h,0,373-(region.ground[row]-sy)*scale,400,h*scale);}}requestAnimationFrame(tick)}requestAnimationFrame(tick);
+</script></html>

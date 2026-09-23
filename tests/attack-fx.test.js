@@ -23,7 +23,7 @@ test('every weapon in the game has its own attack animation', () => {
 test('animated rare weapons keep their own effect and still fight', () => {
   const run = game();
   assert.equal(run("PackAttackFx.resolve('solar_bow').effectKind"), 'solar_bow');
-  assert.equal(run("PackAttackFx.resolve('glacial_estoc').effectKind"), 'frost_scepter');
+  assert.equal(run("PackAttackFx.resolve('glacial_estoc').effectKind"), 'glacial_estoc');
   assert.equal(run("PackAttackFx.resolve('phoenix_lance').unique"), true);
   assert.equal(run("PackAttackFx.resolve('abyssal_eye').effectKind"), 'abyss_eye');
   assert.equal(run("PackAttackFx.resolve('spirit_lance').effectKind"), 'spirit_epic');
@@ -58,35 +58,50 @@ test('flight frames leave the frog and the hit stays on the enemy', () => {
   run("startEncounter();state.mana=500;state.enemies.forEach(e=>{e.x=W*.7;e.hp=1e9});");
   assert.equal(run("weaponAttack(makeItem('void_greatsword',4))"), true);
   const start = run("legendPose(state.effects[0]).x");
-  const frog = run("W*.27+20");
-  assert.ok(Math.abs(start - (frog + 36)) < 2, 'first frame starts in front of the frog');
+  const hand = run("W*.27+128*castScale()*.295");
+  assert.ok(Math.abs(start-hand)<2, 'first frame starts at the frog hand');
   run("state.effects[0].life=state.effects[0].life*0.08; state.effects[0].age=state.effects[0].life*11.5;");
   const end = run("legendPose(state.effects[0]).x");
   const foe = run("state.enemies[0].x");
   assert.ok(Math.abs(end - foe) < 2, 'impact frame sits on the enemy');
   assert.ok(end - start > 80, 'the streak actually crosses the gap');
   run("state.effects=[];weaponAttack(makeItem('eclipse_censer',4))");
-  assert.equal(run("inFlight(state.effects[0])"), true, 'a slam is thrown at the foe, not spawned inside it');
+  assert.equal(run("inFlight(state.effects[0])"), false, 'the eclipse sheet contains its own wind-up');
+  assert.equal(run("legendPose(state.effects[0]).landed"), false, 'the black hole cannot damage during its opening cels');
   const hp = run("state.enemies[0].hp");
-  run("for(let i=0;i<100&&inFlight(state.effects[0]);i++)update(.01)");
-  assert.equal(run("state.enemies[0].hp"), hp, 'no damage before the throw lands');
-  const slam = run("legendPose(impactView(state.effects[0]))");
-  assert.equal(slam.landed, true);
-  assert.ok(Math.abs(slam.x - run("state.enemies[0].x")) < 4, 'the slam lands on the foe');
-  run("var planted=state.effects[0].x;state.enemies[0].x-=40;updateEffects(.01,true)");
-  assert.equal(run("state.effects[0].x"), run("planted"), 'a landed slam stays planted');
+  run("for(let i=0;i<8;i++)updateEffects(.01,true)");
+  assert.equal(run("state.enemies[0].hp"), hp, 'no damage before the black hole opens');
 });
 
-test('hit sheets keep one cel cadence at every weapon level', () => {
+test('redrawn weapon attacks wait for their drawn contact cel before damage', () => {
+  const run = game();
+  for (const type of ['frost_scepter', 'thunder_hammer', 'holy_flail', 'solar_bow', 'dragon_pike', 'eclipse_censer', 'moon_glaive', 'clockwork_trap', 'blood_falchion', 'astral_mirror']) {
+    run(`startEncounter();state.mana=1e6;state.effects=[];state.enemies.forEach(e=>{e.x=W*.7;e.hp=1e9});weaponAttack(makeItem('${type}',2))`);
+    assert.equal(run('legendPose(impactView(state.effects[0])).landed'), false, `${type} starts with wind-up/travel`);
+    const before = run('state.enemies[0].hp');
+    run('for(let i=0;i<8;i++)updateEffects(.01,true)');
+    assert.equal(run('state.enemies[0].hp'), before, `${type} cannot damage before contact`);
+  }
+});
+
+test('star shard falls from the sky onto every selected enemy', () => {
+  const run = game();
+  run("startEncounter();state.mana=1e6;state.effects=[];state.enemies.forEach((e,i)=>{e.x=W*(.5+i*.12);e.hp=1e9});weaponAttack(makeItem('starfall_shard',4))");
+  assert.equal(run("state.effects.filter(f=>f.kind==='starfall_shard').length"), run('state.enemies.length'));
+  assert.equal(run("state.effects.every(f=>f.kind!=='starfall_shard'||f.target)"), true);
+  assert.equal(run("legendPose(impactView(state.effects.find(f=>f.kind==='starfall_shard'))).landed"), false);
+  assert.equal(run("state.effects.filter(f=>f.kind==='starfall_shard').every(f=>f.damage>0&&f.damage===state.effects[0].damage)"), true);
+});
+
+test('evolution preserves wind-up and contact cadence instead of stretching flight', () => {
   const run = game();
   const cadence = level => run(`(()=>{startEncounter();state.mana=1e6;state.effects=[];state.enemies.forEach(e=>{e.x=W*.6;e.hp=1e9});
     weaponAttack(makeItem('dragon_pike',${level}));const fx=impactView(state.effects[0]),whole=fx.age+fx.life;
     const times=[];let last=-1;for(let a=0;a<whole;a+=1/120){const f=legendFrame({...fx,age:a,life:whole-a});if(f!==last){times.push(a);last=f;}}
-    return {step:(times.at(-1)-times[0])/(times.length-1),last};})()`);
+    return {head:times.filter(t=>t<legendContactTime(fx)),last};})()`);
   const low = cadence(1), high = cadence(4);
-  assert.ok(Math.abs(low.step - ART_CEL_VALUE()) < .02 && Math.abs(high.step - ART_CEL_VALUE()) < .02, `${low.step} vs ${high.step}`);
+  assert.deepEqual(low.head, high.head, 'evolution may sustain damage, but may not slow the initial shot');
   assert.equal(high.last, 11, 'long windows still end on the dissipating cel');
-  function ART_CEL_VALUE() { return run('ART_CEL'); }
 });
 
 test('legend sheets share one ground line and are sized by their painted art', () => {

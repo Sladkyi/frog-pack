@@ -17,15 +17,16 @@ const BOSS_HEALTH={4:350,7:850,10:1400,14:2200,17:3200,21:4600};
 // Bosses got a larger share: they now telegraph moves, and a fight must outlast several wind-ups.
 const LEGACY_HP_FIRST=1.25,LEGACY_HP_LAST=.66,LEGACY_BOSS=1,PROC_HP=.3,PROC_BOSS=.45;
 const legacyHp=index=>LEGACY_HP_FIRST+(LEGACY_HP_LAST-LEGACY_HP_FIRST)*index/20;
-// Fights last longer now, so trash chips less and the boss's telegraphed SMASH carries the threat.
-const PROC_DMG=.75,EARLY_EASE=.35;
+// Trash has to be able to kill a player who just mashes. SMASH is still the telegraphed spike on top.
+const PROC_DMG=.88,EARLY_EASE=.35;
 const LEGACY_WAVES=Array.from({length:21},(_,index)=>{
   const number=index+1,difficultyBand=Math.floor(index/7),boss=number%7===0||!!EXTRA_BOSSES[number];
   const hpScale=legacyHp(index);
   return {number,boss,bossKind:EXTRA_BOSSES[number]||(number===14?'mushroomKing':number===21?'ancientTree':null),
     count:boss?5+difficultyBand:Math.min(10,3+Math.floor(number/3)),
-    health:Math.round(32*Math.pow(1.15,index)*hpScale),bossHealth:Math.round((BOSS_HEALTH[number]||0)*hpScale*LEGACY_BOSS),
-    damageScale:1+index*.04,speedScale:1+index*.01,
+    // Trash eases slightly along the six levels: they are cleared at the level-3 cap, without a level-4 merge.
+    health:Math.round(32*Math.pow(1.15,index)*hpScale*(1-index*.012)),bossHealth:Math.round((BOSS_HEALTH[number]||0)*hpScale*LEGACY_BOSS*(1-index*.012)),
+    damageScale:1+index*.055,speedScale:1+index*.014,
     elites:number<5?0:number<11?1:number<18?2:3,
     pool:Object.entries(ENEMY_UNLOCKS).filter(([unlock])=>Number(unlock)<=number).flatMap(([,kinds])=>kinds)};
 });
@@ -71,7 +72,7 @@ const SUPPORT=['bow','spear','storm','bomb','wand','blade','dagger','orb','scyth
 // Compensates the starter kit's main weapon; storm, orb, dagger and hammer lost their old handicaps.
 const WEAPON_HEALTH={axe:1,bow:.85,spear:1,wand:1.08,blade:.88,storm:1,bomb:1.08,scythe:1,hammer:1.25,orb:1.1,dagger:1,tome:1.05};
 // Late growth is gentle: lv4 is now only ~1.45× lv3 and mana caps how many buttons a wide bag can press.
-const HP_LATE=4,HP_WORLD=20,BOSS_LATE=20,BOSS_WORLD=70,DMG_LATE=.0015,DMG_WORLD=.011;
+const HP_LATE=4,HP_WORLD=20,BOSS_LATE=20,BOSS_WORLD=70,DMG_LATE=.003,DMG_WORLD=.016;
 const STAGES=LEGACY_STAGES.map((s,i)=>({...s,id:i+1,world:0,legacy:true,waveCount:s.lastWave-s.firstWave+1}));
 const LEVELS=LEGACY_WAVES.map(w=>({...w,legacy:true,stageIndex:STAGES.findIndex(s=>w.number>=s.firstWave&&w.number<=s.lastWave)}));
 for(let index=6;index<100;index++){
@@ -81,19 +82,20 @@ for(let index=6;index<100;index++){
   const firstWave=LEVELS.length+1;
   // Early procedural stages used to drop below late-legacy HP (~500) while handing out lv3 weapons —
   // that made level 7+ a one-shot stroll. Keep scaling above the Frost Peaks floor.
+  // Level 4 is never in a kit. It is one merge, once per stage, after level 30.
   const weaponTier=3;
   const armorTier=index<40?2:3;
   const bag=index<20?5:index<50?6:7;
   // Only the best copy of a type attacks, so kit growth adds new types, never duplicates.
   const extra=[],owned=new Set([main,support]);
   const addArm=(start,tier)=>{for(let k=0;k<ARMS.length;k++){const type=ARMS[(start+k)%ARMS.length];if(!owned.has(type)){owned.add(type);extra.push([type,tier]);return;}}};
-  if(index>=20)addArm(slot+worldIndex+4,3);
-  if(index>=35)addArm(slot+worldIndex+7,3);
+  if(index>=20)addArm(slot+worldIndex+4,weaponTier);
+  if(index>=35)addArm(slot+worldIndex+7,index<30?2:3);
   if(index>=70&&!owned.has('orb')){owned.add('orb');extra.push(['orb',3]);}
   const stage={id:index+1,name:NAMES[worldIndex][slot],world:worldIndex,biome:world.biome,tint:world.tint,
     firstWave,lastWave:firstWave+waveCount-1,waveCount,bag,
-    gear:[[main,index>=50?4:weaponTier],[support,weaponTier],['armor',armorTier],['boots',armorTier],...extra],
-    lootPool:[main,support,'armor','boots',ARMS[(slot+3)%10],'orb','dagger'],lootTier:3};
+    gear:[[main,weaponTier],[support,weaponTier],['armor',armorTier],['boots',armorTier],...extra],
+    lootPool:[main,support,'armor','boots',ARMS[(slot+3)%10],'orb','dagger'],lootTier:weaponTier};
   STAGES.push(stage);
   for(let local=0;local<waveCount;local++){
     const pattern=PATTERNS[(slot+local*3+worldIndex)%PATTERNS.length];
@@ -121,6 +123,8 @@ for(let index=6;index<100;index++){
       elites:entries.filter(e=>e.elite).length,pool:roster,entries});
   }
 }
+// Level 4 opens with mythic loot. Before that the bag tops out at 3 and chests temper it.
+function levelCap(index){return (index|0)<30?3:4;}
 const LAST_WAVE=LEVELS.length;
 const LEVEL_HOOKS=['Too easy?','They get bigger','Sort the bag','Wrong weapon dies','No room left','Merge or lose','This one hurts','You will retry','The bag is the boss','Don\'t blink'];
 function stageHook(index){
@@ -129,6 +133,6 @@ function stageHook(index){
   if(index===99)return 'You won\'t';
   return LEVEL_HOOKS[index%LEVEL_HOOKS.length];
 }
-const api={STAGES,LEVELS,LAST_WAVE,WORLDS,PATTERNS,ENEMY_UNLOCKS,stageHook};
+const api={STAGES,LEVELS,LAST_WAVE,WORLDS,PATTERNS,ENEMY_UNLOCKS,stageHook,levelCap};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.PackCampaign=api;
 })(typeof window==='undefined'?globalThis:window);

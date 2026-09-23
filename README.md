@@ -27,7 +27,7 @@ Open `index.html` in a browser, or run `npm start` and go to http://127.0.0.1:41
 - Tap a find: a duplicate upgrades the matching backpack item immediately; a new item auto-fills free space (rotating if needed).
 - The Upgrade button merges an available pair without dragging. Pairs show an ↑ arrow. For manual layout, tap an item and a cell, or drag with mouse/finger.
 - Axe is 1×2, shuriken 1×1, staff 1×3, storm stone 2×2, blade 2×1.
-- Two matching items of the same level merge when you drop one onto the other. Cap is level 4. Merging keeps the footprint and strengthens the visible attack effect.
+- Two matching items of the same level merge when you drop one onto the other. Levels 1–30 cap at 3. Level 4 opens at level 31, with mythic loot, and a stage can create only one new top-rank piece — the rest of the bag does not jump to 4 in a single chest. No starter kit includes level 4. Once a weapon is at the cap, another copy does not take a slot: it **tempers** the one you have. A temper is one rule — Focus (harder while mana is focused), Pack (harder into a crowd), Boss (harder on elites and bosses), or Break (faster wind-up breaks) — and a later copy can replace it. After the number stops rising, the chase is retuning the bag.
 - R or Rotate turns the selected item. Discard frees space; you cannot discard the last weapon.
 - Continue ⚔ leaves unclaimed finds at camp and starts the next fight. Space or the top button pauses.
 - Twenty painted backgrounds swap between waves. Every ten levels, enemy pools and weapon kits change. The finale is three boss fights in a row.

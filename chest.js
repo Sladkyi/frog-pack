@@ -3,6 +3,15 @@ const chestScenes = assetImage('chest-short-v2.png');
 const closedChestSheet = assetImage('chest-closed-v3.png');
 const CHEST_DURATION=1.95;
 const DROP_CAP=3;
+// A weapon already at the campaign cap cannot merge. Another copy tempers it instead.
+const TEMPERS=['focus','pack','boss','break'];
+const TEMPER_HINT={
+  focus:'hits harder while Focus is up',
+  pack:'hits harder into a crowd of 4+',
+  boss:'hits harder on elites and bosses',
+  break:'breaks a boss wind-up faster'
+};
+function levelCap(){return (typeof PackCampaign!=='undefined'&&PackCampaign.levelCap)?PackCampaign.levelCap(state.stageIndex||0):4;}
 const TOY_POOL=['wand','bow','spear','bomb','storm','blade','scythe','hammer','orb','dagger','tome','shuriken'];
 const GEAR_POOL=['armor','boots'];
 
@@ -28,13 +37,22 @@ function lootRandom(){
   return ((t^(t>>>14))>>>0)/4294967296;
 }
 function ownedTypes(){return new Set((state.items||[]).map(i=>i.type));}
-function mergableWeapons(){return (state.items||[]).filter(i=>TYPES[i.type]&&!TYPES[i.type].gear&&i.level<4);}
+function mergableWeapons(){return (state.items||[]).filter(i=>TYPES[i.type]&&!TYPES[i.type].gear&&i.level<levelCap());}
+function cappedWeapons(){return (state.items||[]).filter(i=>TYPES[i.type]&&!TYPES[i.type].gear&&i.level>=levelCap());}
 function dropLevel(type){
+  const cap=levelCap();
   const existing=(state.items||[]).find(i=>i.type===type);
-  if(existing)return Math.min(DROP_CAP,existing.level);
+  if(existing)return Math.min(cap,DROP_CAP,existing.level);
   // Plain new weapons arrive a tier lower, so a rare+ find is the one that changes the bag.
   const tier=currentStage().lootTier||1,plain=!TYPES[type].gear&&rarityRank(type)<2;
-  return Math.min(DROP_CAP,Math.max(1,tier-(plain?1:0)));
+  return Math.min(cap,DROP_CAP,Math.max(1,tier-(plain?1:0)));
+}
+function temperOffer(type){
+  const host=(state.items||[]).find(i=>i.type===type);
+  const item=makeItem(type,host?.level||1);
+  item.tune=true;
+  item.temper=TEMPERS[Math.floor(lootRandom()*TEMPERS.length)];
+  return item;
 }
 function weightedPick(entries){
   const total=entries.reduce((s,[,w])=>s+w,0);
@@ -58,10 +76,16 @@ function rollWeapon(avoid,forceEpic=false){
 }
 function rollDrop(avoid,{allowGear=true,forceEpic=false}={}){
   const weapons=mergableWeapons().filter(i=>!avoid.has(i.type));
+  const capped=cappedWeapons().filter(i=>!avoid.has(i.type));
   const roll=lootRandom();
   if(!forceEpic&&roll<.3&&weapons.length){
     const target=weapons[Math.floor(lootRandom()*weapons.length)];
-    return makeItem(target.type,Math.min(DROP_CAP,target.level));
+    return makeItem(target.type,Math.min(levelCap(),DROP_CAP,target.level));
+  }
+  // At the cap a duplicate is a temper: it retunes the weapon you have and takes no bag slot.
+  if(!forceEpic&&roll<.3&&capped.length){
+    const target=capped[Math.floor(lootRandom()*capped.length)];
+    return temperOffer(target.type);
   }
   if(!forceEpic&&allowGear&&roll>=.82){
     const gear=GEAR_POOL.filter(type=>!avoid.has(type))[Math.floor(lootRandom()*2)]||GEAR_POOL[0];
@@ -204,7 +228,16 @@ function renderRummage(){
  const age=state.chestAge;
  if(age>=CHEST_DURATION){lootStop();return;}
  drawChestGlow(age);
- if(age<CHEST_ENTER){drawClosedChest();renderFrogHero();return;}
+ if(age<CHEST_ENTER){
+   const t=Math.min(1,age/CHEST_ENTER),k=t*t*(3-2*t);
+   drawClosedChest();renderFrogHero({dx:chestHeroSize()*.1*k,scale:1-.065*k});return;
+ }
+ // Settle into the actual idle sheet before the loot UI opens. Exactly one
+ // frog is drawn, with a smooth position/scale settle, never a cross-fade.
+ if(age>=CHEST_DURATION-.24){
+   const t=Math.min(1,(age-(CHEST_DURATION-.24))/.24),k=t*t*(3-2*t);
+   drawChestScene(2,0,true);renderFrogHero({frame:20,dx:chestHeroSize()*.1*(1-k),scale:.935+.065*k});return;
+ }
  const frame=chestFrame();
  // Each dig cel is held ~0.25s; a fast shake keeps the hold alive, and it builds harder for rarer finds.
  const rank=chestRewardRank(),build=Math.min(1,(age-CHEST_ENTER)/(CHEST_REVEAL-CHEST_ENTER));
