@@ -1,0 +1,10 @@
+# Short chest animation
+
+`chest-short-v2.png`: six generated poses, three entering and three returning. Duration 1.95 seconds, with no repeating digging cycle or exit hop. Explicit chest-corner registration fixes its width, height and ground line across differently framed source drawings. Short eased blends connect the stop and idle atlas poses. One reserved item is revealed near the exit and awarded once after the scene.
+
+Generated with built-in ImageGen; original PNG alpha preserved. Supersedes CHEST-V1.md.
+
+## Prompt
+
+Create a transparent PNG animation sprite sheet EXACTLY 3 columns x 2 rows, 6 equal square cells 1536x1024. Reference1 exact frog character/scale/idle; reference2 chest style only. A SHORT clean enter-and-exit chest animation. VERY IMPORTANT same fixed chest box in all six cels: chest front spans x52%-92% cell, floor y92%, front rim y68%, identical chest width height, no zoom, no camera shift. Frog same head size in all cels, green frog long legs, broad rust brown wizard hat with three small black spider companions, mustard scarf cream tunic brown satchel. Facing RIGHT. Entire frog and hat within cell. Dark ink cartoon.
+Cel1 frog standing LEFT of open chest, beginning to lean into it, hand on rim, frog feet x25%-47% at y92%. Cel2 frog leans deeply headfirst into chest, feet leaving ground, hat disappears behind rim. Cel3 ONLY two green frog legs stick upwards from chest, body hidden. Cel4 frog rises back up over LEFT rim, face hat and hands visible, one knee up on rim, body behind chest. Cel5 frog steps OUT TO LEFT of chest, both feet landing at original floor positions, bent knees, front hand forward EMPTY, same frog size ascel1. Cel6 frog fully upright LEFT of open chest in the EXACT ordinary idle pose of bottom-left cel in reference1, feet x25%-47%, body same size same identity, front empty fist at chest height. This is 3 ingress + 3 egress poses, no additional frames, no repeated digging, no hopping. Chest must stay literally identical size and placement throughout. Empty hands, game loot drawn separately. Actual transparent alpha no scenery grid text numbers shadows or checkerboard.

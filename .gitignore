@@ -1,0 +1,18 @@
+# Old before/after snapshot — not part of the playable build.
+/dist/
+
+# Local balance / debug dumps.
+/reports/
+
+# Source drafts kept next to shipping art.
+/assets/_backup/
+/assets/*-gen.png
+/assets/*.orig.png
+/assets/*.orig.prev.png
+/assets/_debug*
+/assets/test_*.png
+
+node_modules/
+.DS_Store
+.mcheck/
+*.log

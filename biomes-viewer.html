@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PACK / RUN — Interactive viewer for 20 unique locations</title>
+  <style>
+    :root {
+      --bg: #0f1715;
+      --card-bg: #162420;
+      --border: #2a3d36;
+      --accent: #5eead4;
+      --accent-warm: #f59e0b;
+      --text: #e6f1ed;
+      --text-muted: #94a39e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      padding: 24px;
+      line-height: 1.5;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 18px;
+    }
+    header h1 {
+      font-size: 28px;
+      color: var(--accent);
+      margin-bottom: 6px;
+      letter-spacing: 0.5px;
+    }
+    header p {
+      color: var(--text-muted);
+      font-size: 15px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: rgba(94, 234, 212, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(94, 234, 212, 0.3);
+      font-size: 12px;
+      font-weight: 600;
+      margin: 4px;
+    }
+    .viewer-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      max-width: 1100px;
+      margin: 0 auto 32px auto;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+    }
+    .canvas-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 900 / 348;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 2px solid var(--border);
+      margin-bottom: 16px;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .hud-overlay {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    }
+    .hud-biome {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #fff;
+      background: rgba(0,0,0,0.5);
+      padding: 4px 14px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .hud-stats {
+      font-size: 14px;
+      color: #cbd5e1;
+      background: rgba(0,0,0,0.5);
+      padding: 4px 12px;
+      border-radius: 6px;
+    }
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    button {
+      background: #1e332c;
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    button:hover {
+      background: #28443b;
+      border-color: var(--accent);
+    }
+    button.active {
+      background: var(--accent);
+      color: #0d2822;
+      border-color: var(--accent);
+      box-shadow: 0 0 10px rgba(94, 234, 212, 0.4);
+    }
+    .slider-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #111c19;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      flex: 1;
+    }
+    input[type="range"] {
+      flex: 1;
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+    .gallery-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 36px 0 16px 0;
+      color: #fff;
+      border-left: 4px solid var(--accent);
+      padding-left: 10px;
+      max-width: 1100px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 18px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .biome-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      padding: 14px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .biome-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--accent);
+    }
+    .biome-card h3 {
+      font-size: 15px;
+      margin-bottom: 4px;
+      color: var(--accent);
+    }
+    .biome-card p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      min-height: 36px;
+    }
+    .biome-card img {
+      width: 100%;
+      height: 150px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      display: block;
+    }
+    .fx-preview-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .fx-stage {
+      position: relative;
+      background: #0a1210;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+      overflow: hidden;
+      width: 100%;
+      min-height: 280px;
+      aspect-ratio: 900 / 348;
+    }
+    .fx-stage canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .fx-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .fx-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-height: none;
+      overflow: visible;
+    }
+    .fx-list button {
+      text-align: left;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      min-width: 120px;
+      padding: 8px 12px;
+    }
+    .fx-list button span {
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 11px;
+    }
+    .fx-meta {
+      background: #111c19;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .fx-meta b { color: var(--accent); }
+    .fx-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .fx-strip canvas {
+      width: 100%;
+      aspect-ratio: 1;
+      background: #0a1210;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    .section-note {
+      color: var(--text-muted);
+      font-size: 14px;
+      max-width: 1100px;
+      margin: -8px auto 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>PACK / RUN — 20 Real Unique Locations</h1>
+    <p>Each background is drawn with its own unique architecture, landscape, and details (mountains, brook, market, castle halls, cave, village, lighthouse, windmills, and more). All backgrounds tile seamlessly and blend smoothly into each other.</p>
+    <div style="margin-top: 8px;">
+      <span class="badge">20 Distinct Locations</span>
+      <span class="badge">1774×887 px (2:1)</span>
+      <span class="badge">Ground line y=79%</span>
+      <span class="badge">Seamless scrolling</span>
+      <span class="badge">Smoothstep Crossfade</span>
+      <span class="badge">Attack preview</span>
+    </div>
+  </header>
+
+  <div class="viewer-container">
+    <div class="canvas-wrap">
+      <canvas id="viewCanvas" width="900" height="348"></canvas>
+      <div class="hud-overlay">
+        <div class="hud-biome" id="hudBiome">1. TWILIGHT FOREST</div>
+        <div class="hud-stats" id="hudStats">Distance: 0 m · Speed: 1x</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="btn-group" id="biomeButtons"></div>
+
+      <div style="display:flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+        <button id="btnAuto" style="background:#f59e0b; color:#18181b;">✦ Auto-cycle locations</button>
+        <button id="btnSpeed">Speed: 1x</button>
+        <div class="slider-box">
+          <span>Blend with next:</span>
+          <input type="range" id="blendSlider" min="0" max="100" value="0">
+          <b id="blendVal">0%</b>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="gallery-title">Weapon attack preview</h2>
+  <p class="section-note">Pick a weapon with the buttons below — same animation and frames as in combat.</p>
+  <div class="viewer-container">
+    <div class="fx-preview-grid">
+      <div class="fx-list" id="fxList" aria-label="Attack list"></div>
+      <div class="fx-toolbar">
+        <button id="fxReplay" class="active">↻ Replay</button>
+        <button id="fxPause">Ⅱ Pause</button>
+        <div class="slider-box" style="padding:6px 10px; min-width:220px;">
+          <span>Speed</span>
+          <input type="range" id="fxSpeed" min="25" max="200" value="100">
+          <b id="fxSpeedVal">1.0x</b>
+        </div>
+      </div>
+      <div class="fx-stage">
+        <canvas id="fxCanvas" width="900" height="348"></canvas>
+        <div class="hud-overlay">
+          <div class="hud-biome" id="fxHudName">Staff · Sky beam</div>
+          <div class="hud-stats" id="fxHudFrame">Frame 1 / 12</div>
+        </div>
+      </div>
+      <div class="fx-meta" id="fxMeta">
+        <b>Staff</b> — classic sky beam from <code>beam-frames-v2</code>.
+        <div class="fx-strip" id="fxStrip"></div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="gallery-title">Gallery of all 20 locations (1774×887)</h2>
+  <div class="gallery-grid" id="galleryGrid"></div>
+
+  <script src="assets-manifest.js"></script>
+  <script>
+    const WEATHER_LABEL = {
+      fireflies: 'fireflies', rain: 'rain', drizzle: 'drizzle',
+      spores: 'spores', pollen: 'pollen', petals: 'petals', dust: 'dust', chaff: 'chaff',
+      embers: 'embers', clear: 'clear'
+    };
+    const BIOMES_DATA = [
+      { id: 'forest', name: 'TWILIGHT FOREST (ORIGINAL)', file: 'forest-v2.png', weather: { kind: 'fireflies', color: '#f8edab90', count: 14, size: 1.6, speed: .22 }, desc: 'Fireflies at dusk', partColor: '#f8edab85', partCount: 7, speed: .25 },
+      { id: 'mountains', name: 'OLD BRIDGE AND BROOK', file: 'bg-02-mountains.png', weather: { kind: 'rain', color: '#d8e8f8', count: 70, size: 1.35, speed: .55, wind: .4, veil: '#d0dce818' }, desc: 'Rain like in Don\'t Let Him Die', partColor: '#67e8f985', partCount: 8, speed: .22 },
+      { id: 'brook', name: 'HOME POND BANK', file: 'bg-03-brook.png', noMirror: true, weather: { kind: 'clear', color: '#86efac80', count: 8, size: 1.3, speed: .2 }, desc: 'Clear by the pond', partColor: '#86efac85', partCount: 8, speed: .2 },
+      { id: 'market', name: 'BARON ROOT CAVE', file: 'bg-04-market.png', noMirror: true, weather: { kind: 'spores', color: '#fed7aa90', count: 16, size: 1.5, speed: .14, veil: '#3a2a1814' }, desc: 'Spores under the roots', partColor: '#fed7aa80', partCount: 7, speed: .18 },
+      { id: 'castle', name: 'WILD SWAMP AND REEDS', file: 'bg-05-castle.png', weather: { kind: 'drizzle', color: '#d8e8f8', count: 48, size: 1.2, speed: .4, wind: .3, veil: '#c8d4b814' }, desc: 'Drizzle over the swamp', partColor: '#a3e63585', partCount: 9, speed: .2 },
+      { id: 'cave', name: 'VILLAGE GARDEN AND PLOT', file: 'bg-06-cave.png', weather: { kind: 'pollen', color: '#fde04790', count: 18, size: 1.4, speed: .2 }, desc: 'Pollen in the garden', partColor: '#fde04780', partCount: 7, speed: .22 },
+      { id: 'swamp', name: 'MILL ROAD', file: 'bg-07-swamp.png', weather: { kind: 'clear', color: '#fef08a80', count: 10, size: 1.3, speed: .28 }, desc: 'Clear day', partColor: '#fef08a85', partCount: 9, speed: .25 },
+      { id: 'village', name: 'MANOR GARDEN AND GROVE', file: 'bg-08-village.png', weather: { kind: 'petals', color: '#f9a8d4aa', count: 16, size: 2.2, speed: .18, wind: .4 }, desc: 'Falling petals', partColor: '#86efac80', partCount: 8, speed: .2 },
+      { id: 'desert', name: 'CASTLE YARD AT SUNSET', file: 'bg-09-desert.png', noMirror: true, weather: { kind: 'dust', color: '#fb923c88', count: 20, size: 1.4, speed: .32, wind: .55, veil: '#c45a2014' }, desc: 'Sunset dust', partColor: '#fb923c85', partCount: 8, speed: .18 },
+      { id: 'crypt', name: 'MANOR STONE WALLS', file: 'bg-10-crypt.png', weather: { kind: 'clear', color: '#cbd5e180', count: 8, size: 1.2, speed: .2 }, desc: 'Clear by the walls', partColor: '#94a3b885', partCount: 8, speed: .2 },
+      { id: 'snow', name: 'FARM YARD', file: 'bg-11-snow.png', weather: { kind: 'chaff', color: '#f5e6c8aa', count: 18, size: 1.5, speed: .25, wind: .45 }, desc: 'Flying chaff', partColor: '#fed7aa85', partCount: 7, speed: .2 },
+      { id: 'windmills', name: 'GARDEN BY THE BOG', file: 'bg-12-windmills.png', noMirror: true, weather: { kind: 'drizzle', color: '#d8e8f8', count: 48, size: 1.2, speed: .45, wind: .28, veil: '#c8d4b814' }, desc: 'Drizzle over the bog', partColor: '#a3e63580', partCount: 8, speed: .18 },
+      { id: 'bamboo', name: 'ROYAL ARENA', file: 'bg-13-bamboo.png', noMirror: true, weather: { kind: 'dust', color: '#e7d3a088', count: 22, size: 1.3, speed: .3, wind: .5, veil: '#8a704012' }, desc: 'Arena dust', partColor: '#fde04785', partCount: 8, speed: .22 },
+      { id: 'volcano', name: 'OLD POND AND LILIES', file: 'bg-14-volcano.png', noMirror: true, weather: { kind: 'clear', color: '#5eead480', count: 8, size: 1.3, speed: .18 }, desc: 'Clear by the pond', partColor: '#5eead485', partCount: 9, speed: .2 },
+      { id: 'temple', name: 'KINGDOM GREEN MEADOWS', file: 'bg-15-temple.png', weather: { kind: 'pollen', color: '#bbf7d090', count: 20, size: 1.35, speed: .24 }, desc: 'Pollen on the meadows', partColor: '#86efac85', partCount: 9, speed: .25 },
+      { id: 'gardens', name: 'DEEP CLAWED WOODS', file: 'bg-16-gardens.png', weather: { kind: 'fireflies', color: '#f8edab90', count: 16, size: 1.7, speed: .2, veil: '#1a281810' }, desc: 'Fireflies in the woods', partColor: '#f8edab80', partCount: 8, speed: .22 },
+      { id: 'coast', name: 'CASTLE KNIGHT HALL', file: 'bg-17-coast.png', weather: { kind: 'dust', color: '#fdba7488', count: 12, size: 1.2, speed: .12, veil: '#1a12080e' }, desc: 'Dust in the hall', partColor: '#fb923c85', partCount: 7, speed: .15 },
+      { id: 'forge', name: 'ARMORY CHAMBER', file: 'bg-18-forge.png', weather: { kind: 'dust', color: '#94a3b888', count: 14, size: 1.25, speed: .14, veil: '#10182012' }, desc: 'Armory dust', partColor: '#94a3b885', partCount: 8, speed: .18 },
+      { id: 'skyislands', name: 'UNDERGROUND FORGE', file: 'bg-19-skyislands.png', noMirror: true, weather: { kind: 'embers', color: '#fdba74ee', count: 28, size: 1.7, speed: .18, veil: '#3a180810' }, desc: 'Embers from the forge', partColor: '#fdba7495', partCount: 11, speed: .28 },
+      { id: 'throneroom', name: 'ANCIENT CRYPT AND TOMB', file: 'bg-20-throneroom.png', weather: { kind: 'dust', color: '#94a3b888', count: 12, size: 1.2, speed: .1, veil: '#1e293b1a' }, desc: 'Crypt dust', partColor: '#94a3b890', partCount: 8, speed: .15 }
+    ];
+
+    const canvas = document.getElementById('viewCanvas');
+    const ctx = canvas.getContext('2d');
+    const hudBiome = document.getElementById('hudBiome');
+    const hudStats = document.getElementById('hudStats');
+    const blendSlider = document.getElementById('blendSlider');
+    const blendVal = document.getElementById('blendVal');
+    const btnAuto = document.getElementById('btnAuto');
+    const btnSpeed = document.getElementById('btnSpeed');
+    const btnGroup = document.getElementById('biomeButtons');
+
+    let currentIdx = 0;
+    let targetIdx = 1;
+    let blend = 0;
+    let distance = 0;
+    let autoCycle = false;
+    let autoTimer = 0;
+    let runSpeed = 1;
+
+    function loadImg(file) {
+      const img = new Image();
+      img.src = (typeof ASSET_URLS !== 'undefined' && ASSET_URLS[file]) ? ASSET_URLS[file] : `assets/${file}`;
+      return img;
+    }
+    const images = BIOMES_DATA.map(b => (b.files || [b.file]).map(loadImg));
+
+    // Populate buttons
+    BIOMES_DATA.forEach((b, i) => {
+      const btn = document.createElement('button');
+      btn.textContent = `${i + 1}. ${b.name.split(' ')[0]}`;
+      btn.title = b.name;
+      if (i === 0) btn.classList.add('active');
+      btn.onclick = () => {
+        btnGroup.querySelectorAll('button').forEach(el => el.classList.remove('active'));
+        btn.classList.add('active');
+        currentIdx = i;
+        targetIdx = (i + 1) % BIOMES_DATA.length;
+        blend = 0;
+        blendSlider.value = 0;
+        blendVal.textContent = '0%';
+        autoCycle = false;
+        btnAuto.style.background = '#f59e0b';
+      };
+      btnGroup.appendChild(btn);
+    });
+
+    // Populate gallery
+    const gallery = document.getElementById('galleryGrid');
+    BIOMES_DATA.forEach((b, i) => {
+      const card = document.createElement('div');
+      card.className = 'biome-card';
+      const files = b.files || [b.file];
+      const thumbs = files.map(f => {
+        const imgUrl = (typeof ASSET_URLS !== 'undefined' && ASSET_URLS[f]) ? ASSET_URLS[f] : `assets/${f}`;
+        return `<img src="${imgUrl}" alt="${b.name}" loading="lazy">`;
+      }).join('');
+      card.innerHTML = `
+        <h3>${i + 1}. ${b.name}</h3>
+        <p>${b.desc}</p>
+        ${thumbs}
+      `;
+      gallery.appendChild(card);
+    });
+
+    btnAuto.onclick = () => {
+      autoCycle = !autoCycle;
+      btnAuto.style.background = autoCycle ? '#10b981' : '#f59e0b';
+      btnAuto.textContent = autoCycle ? '✓ Auto-cycle on' : '✦ Auto-cycle locations';
+    };
+
+    btnSpeed.onclick = () => {
+      runSpeed = runSpeed === 1 ? 2 : runSpeed === 2 ? 4 : 1;
+      btnSpeed.textContent = `Speed: ${runSpeed}x`;
+    };
+
+    blendSlider.oninput = () => {
+      blend = Number(blendSlider.value) / 100;
+      blendVal.textContent = `${Math.round(blend * 100)}%`;
+      autoCycle = false;
+      btnAuto.style.background = '#f59e0b';
+    };
+
+    function drawTiled(tileImgs, biome, alpha) {
+      const tiles = tileImgs.filter(img => img.complete && img.naturalWidth);
+      if (!tiles.length || alpha <= 0.001) return;
+      const W = canvas.width, H = canvas.height;
+      const sample = tiles[0];
+      const tileWidth = H * sample.naturalWidth / sample.naturalHeight;
+      const scroll = distance * 7, firstTile = Math.floor(scroll / tileWidth), offset = scroll % tileWidth;
+      const multi = tiles.length > 1;
+      const allowMirror = !multi && !biome.noMirror;
+
+      ctx.save();
+      if (alpha < 0.999) ctx.globalAlpha = alpha;
+      for (let i = 0; i * tileWidth - offset < W; i++) {
+        const tileIndex = firstTile + i;
+        const img = tiles[((tileIndex % tiles.length) + tiles.length) % tiles.length];
+        const x = i * tileWidth - offset;
+        ctx.save();
+        ctx.translate(x, 0);
+        if (allowMirror && tileIndex % 2) {
+          ctx.translate(tileWidth, 0);
+          ctx.scale(-1, 1);
+        }
+        ctx.drawImage(img, 0, 0, tileWidth + 0.5, H);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+
+    let weatherTime = 0;
+    let viewerRain = [];
+    let viewerRainKind = '';
+    function rebuildViewerRain(kind) {
+      if (viewerRainKind === kind && viewerRain.length) return;
+      viewerRainKind = kind;
+      viewerRain = [];
+      if (kind !== 'rain' && kind !== 'drizzle' && kind !== 'storm') return;
+      const W = canvas.width, H = canvas.height;
+      const n = kind === 'storm' ? 88 : kind === 'rain' ? 70 : 48;
+      const vyBase = kind === 'drizzle' ? 520 : 780;
+      const vySpan = kind === 'drizzle' ? 200 : 280;
+      const sizeBase = kind === 'drizzle' ? 9 : 12;
+      const sizeSpan = kind === 'drizzle' ? 10 : 14;
+      for (let i = 0; i < n; i++) {
+        viewerRain.push({
+          x: Math.random() * (W + 80) - 40,
+          y: Math.random() * H,
+          vx: 70 + Math.random() * 40,
+          vy: vyBase + Math.random() * vySpan,
+          size: sizeBase + Math.random() * sizeSpan,
+          alpha: 0.18 + Math.random() * 0.28
+        });
+      }
+    }
+    function stepViewerRain(dt, kind) {
+      rebuildViewerRain(kind);
+      const W = canvas.width, H = canvas.height;
+      for (const d of viewerRain) {
+        d.x += d.vx * dt;
+        d.y += d.vy * dt;
+        if (d.y > H + 20) { d.y = -20; d.x = Math.random() * (W + 80) - 40; }
+        if (d.x > W + 40) d.x -= W + 80;
+        if (d.x < -40) d.x += W + 80;
+      }
+    }
+    function drawWeather(w, alpha) {
+      if (!w || alpha <= 0.01) return;
+      const W = canvas.width, H = canvas.height, kind = w.kind || 'clear';
+      if (w.veil) { ctx.fillStyle = w.veil; ctx.globalAlpha = alpha; ctx.fillRect(0, 0, W, H); }
+      if (kind === 'rain' || kind === 'drizzle' || kind === 'storm') {
+        const storm = kind === 'storm';
+        for (const d of viewerRain) {
+          ctx.globalAlpha = Math.min(1, d.alpha * alpha);
+          ctx.strokeStyle = storm ? '#c8d8f0' : '#d8e8f8';
+          ctx.lineWidth = storm ? 1.6 : 1.35;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(d.x, d.y);
+          ctx.lineTo(d.x + d.vx * 0.018, d.y + d.size);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        return;
+      }
+      ctx.globalAlpha = Math.min(1, alpha);
+      const scroll = distance * 7;
+      for (let i = 0; i < w.count; i++) {
+        const seed = i * 97.13;
+        let px, py, s = w.size;
+        if (kind === 'embers') {
+          const rise = weatherTime * 55 + seed * 18;
+          px = ((i * 113 - scroll * w.speed + Math.sin(weatherTime + i) * 12) % (W + 30) + W + 30) % (W + 30);
+          py = H * .85 - ((i * 41 + rise) % (H * .7));
+          s *= .7 + (Math.sin(weatherTime * 4 + i) * .5 + .5) * .8;
+        } else if (kind === 'petals' || kind === 'chaff' || kind === 'pollen' || kind === 'spores' || kind === 'dust') {
+          const drift = weatherTime * (28 + (w.wind || .3) * 40) + seed * 10;
+          px = ((i * 91 - scroll * w.speed + drift * (w.wind || .35) + Math.sin(weatherTime + i) * 18) % (W + 40) + W + 40) % (W + 40);
+          py = H * .12 + (i * 37 % (H * .55)) + Math.cos(weatherTime * 1.2 + i) * 10;
+          if (kind === 'petals') {
+            ctx.fillStyle = w.color; ctx.beginPath(); ctx.ellipse(px, py, s * 1.2, s * .55, weatherTime + i, 0, Math.PI * 2); ctx.fill();
+            continue;
+          }
+        } else {
+          px = ((i * 137 - scroll * w.speed) % (W + 30) + W + 30) % (W + 30);
+          py = H * .16 + (i * 43 % (H * .45)) + Math.sin(weatherTime * 1.5 + i) * 6;
+          if (kind === 'fireflies') {
+            const pulse = .45 + Math.sin(weatherTime * 3.2 + i * 1.7) * .55;
+            s *= .6 + pulse * .7;
+            ctx.globalAlpha = Math.min(1, alpha * (.35 + pulse * .65));
+          }
+        }
+        ctx.fillStyle = w.color; ctx.beginPath(); ctx.ellipse(px, py, s, s, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = Math.min(1, alpha);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    let lastTime = performance.now();
+    function animate(now) {
+      const dt = Math.min(0.1, (now - lastTime) / 1000);
+      lastTime = now;
+      weatherTime += dt;
+
+      distance += dt * 40 * runSpeed;
+
+      if (autoCycle) {
+        autoTimer += dt;
+        if (autoTimer > 4.5) {
+          blend += dt * 0.8;
+          if (blend >= 1) {
+            blend = 0;
+            autoTimer = 0;
+            currentIdx = targetIdx;
+            targetIdx = (currentIdx + 1) % BIOMES_DATA.length;
+            const btns = btnGroup.querySelectorAll('button');
+            btns.forEach(b => b.classList.remove('active'));
+            btns[currentIdx]?.classList.add('active');
+          }
+          blendSlider.value = Math.round(blend * 100);
+          blendVal.textContent = `${Math.round(blend * 100)}%`;
+        }
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const curB = BIOMES_DATA[currentIdx];
+      const nxtB = BIOMES_DATA[targetIdx];
+      const smoothBlend = blend * blend * (3 - 2 * blend);
+      const active = smoothBlend > 0.5 ? nxtB : curB;
+      stepViewerRain(dt, active.weather?.kind || 'clear');
+
+      drawTiled(images[currentIdx], curB, 1.0);
+      if (smoothBlend > 0) {
+        drawTiled(images[targetIdx], nxtB, smoothBlend);
+      }
+      if (smoothBlend < 0.98) drawWeather(curB.weather, 1 - smoothBlend);
+      if (smoothBlend > 0.02 && curB.weather?.kind !== nxtB.weather?.kind) drawWeather(nxtB.weather, smoothBlend);
+
+      // Footing guide: per-biome ground line used by the frog in-game.
+      const BIOME_GROUND_Y = [0.798, 0.787, 0.720, 0.786, 0.680, 0.745, 0.784, 0.790, 0.760, 0.860, 0.802, 0.820, 0.860, 0.820, 0.807, 0.788, 0.800, 0.800, 0.770, 0.761];
+      const gyIdx = smoothBlend > 0.5 ? targetIdx : currentIdx;
+      const gy = canvas.height * (BIOME_GROUND_Y[gyIdx] ?? 0.79);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,72,72,.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(canvas.width, gy); ctx.stroke();
+      ctx.fillStyle = 'rgba(80,255,120,.75)';
+      ctx.beginPath(); ctx.ellipse(canvas.width * .27, gy, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+
+      const weatherName = WEATHER_LABEL[active.weather?.kind] || active.weather?.kind || '';
+      hudBiome.textContent = `${smoothBlend > 0.5 ? targetIdx + 1 : currentIdx + 1}. ${active.name}`;
+      hudStats.textContent = `Distance: ${Math.floor(distance)} m · Weather: ${weatherName} · Blend: ${Math.round(smoothBlend * 100)}%`;
+
+      requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
+
+    // ── Attack FX preview ──────────────────────────────────────────────
+    const ATTACKS = [
+      {
+        id: 'wand', name: 'Staff', label: 'Sky beam', file: 'beam-frames-v2.png',
+        mode: 'beam', cols: 4, rows: 3, frames: 12, life: 1.35,
+        desc: 'Celestial pillar: wind-up → sky strike → fade. Same atlas as in combat.'
+      },
+      {
+        id: 'hammer', name: 'Hammer', label: 'Fall + ring', file: 'hammer-fx-v4.png',
+        mode: 'strip', cols: 6, rows: 1, frames: 6, widthScale: 1.15,
+        desc: 'Falling hammer, crater, and shock ring — not a beam.'
+      },
+      {
+        id: 'tome', name: 'Grimoire', label: 'Circle + rune rain', file: 'tome-fx-v2.png',
+        mode: 'strip', cols: 6, rows: 1, frames: 6, widthScale: 1.25,
+        desc: 'Seal on the ground and glyph rain, no vertical pillar.'
+      },
+      {
+        id: 'scythe', name: 'Scythe', label: 'Horizontal harvest', file: 'scythe-fx-v2.png',
+        mode: 'strip', cols: 6, rows: 1, frames: 6, widthScale: 2.1,
+        desc: 'Wide sickle sweep left to right across the group.'
+      },
+      {
+        id: 'orb', name: 'Orb', label: 'Constellation', file: 'orb-fx-v2.png',
+        mode: 'strip', cols: 6, rows: 1, frames: 6, widthScale: 1.2,
+        desc: 'Orbiting spheres → radial burst.'
+      },
+      {
+        id: 'dagger', name: 'Dagger', label: 'Stab flurry', file: 'dagger-fx-v3.png',
+        mode: 'strip', cols: 6, rows: 1, frames: 6, widthScale: 1.15,
+        desc: 'Stabs from multiple angles.'
+      },
+      {
+        id: 'axe', name: 'Axe', label: 'Fire strike', file: 'weapon-frames-v2.png',
+        mode: 'grid', cols: 6, rows: 4, row: 0, frames: 6, widthScale: 1,
+        desc: 'Classic fire impact from weapon-frames.'
+      },
+      {
+        id: 'blade', name: 'Blade', label: 'Golden slash', file: 'weapon-frames-v2.png',
+        mode: 'grid', cols: 6, rows: 4, row: 1, frames: 6, widthScale: 1,
+        desc: 'Cutting blade arc.'
+      },
+      {
+        id: 'shuriken', name: 'Shuriken', label: 'Blade whirl', file: 'shuriken-fx-v2.png',
+        mode: 'grid', cols: 6, rows: 4, row: 2, frames: 6, widthScale: 1,
+        desc: 'Olive blade whirl (weapon-frames row 3).'
+      },
+      {
+        id: 'storm', name: 'Storm Stone', label: 'Lightning', file: 'weapon-frames-v2.png',
+        mode: 'grid', cols: 6, rows: 4, row: 3, frames: 6, widthScale: 1,
+        desc: 'Branching discharge.'
+      },
+      {
+        id: 'bow', name: 'Bow', label: 'Forest bolt', file: 'seed-bolt-v1.png',
+        mode: 'pair', cols: 3, rows: 2, frames: 6, widthScale: 1,
+        desc: 'Seed flight (row 1) → hit flash (row 2).'
+      },
+      {
+        id: 'spear', name: 'Spear', label: 'Jade thrust', file: 'spear-thrust-v2.png',
+        mode: 'pair', cols: 3, rows: 2, frames: 6, widthScale: 1,
+        desc: 'Piercing thrust (row 1) → shockwave (row 2).'
+      },
+      {
+        id: 'bomb', name: 'Bomb', label: 'Blast + afterburn', file: 'new-attacks-v1.png',
+        mode: 'bomb', cols: 6, rows: 3, row: 2, frames: 6, widthScale: 1.15,
+        desc: 'Fireball and smoke after the blast (new-attacks bomb row).'
+      }
+    ];
+
+    const fxCanvas = document.getElementById('fxCanvas');
+    const fxCtx = fxCanvas.getContext('2d');
+    const fxList = document.getElementById('fxList');
+    const fxHudName = document.getElementById('fxHudName');
+    const fxHudFrame = document.getElementById('fxHudFrame');
+    const fxMeta = document.getElementById('fxMeta');
+    const fxReplay = document.getElementById('fxReplay');
+    const fxPause = document.getElementById('fxPause');
+    const fxSpeed = document.getElementById('fxSpeed');
+    const fxSpeedVal = document.getElementById('fxSpeedVal');
+    const forestBg = loadImg('forest-v2.png');
+    const attackSheets = {};
+    ATTACKS.forEach(a => { if (!attackSheets[a.file]) attackSheets[a.file] = loadImg(a.file); });
+
+    let fxIdx = 0;
+    let fxAge = 0;
+    let fxPaused = false;
+    let fxRate = 1;
+    let fxLast = performance.now();
+    let fxW = 900, fxH = 348;
+
+    function resizeFxCanvas() {
+      const wrap = fxCanvas.parentElement;
+      if (!wrap) return;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      const cssW = Math.max(640, wrap.clientWidth || 900);
+      const cssH = Math.round(cssW * 348 / 900);
+      fxW = cssW;
+      fxH = cssH;
+      fxCanvas.width = Math.round(cssW * dpr);
+      fxCanvas.height = Math.round(cssH * dpr);
+      fxCanvas.style.width = cssW + 'px';
+      fxCanvas.style.height = cssH + 'px';
+      fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      fxCtx.imageSmoothingEnabled = true;
+      fxCtx.imageSmoothingQuality = 'high';
+    }
+    resizeFxCanvas();
+    window.addEventListener('resize', resizeFxCanvas);
+
+    function celHoldFrame(age, duration, holds) {
+      let t = Math.max(0, age) / Math.max(0.001, duration) * holds.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < holds.length; i++) {
+        if (t < holds[i]) return i;
+        t -= holds[i];
+      }
+      return holds.length - 1;
+    }
+
+    function drawFitted(ctx, sheet, sx, sy, sw, sh, cx, ground, boxW, boxH) {
+      if (!sheet?.complete || !sheet.naturalWidth) return false;
+      const scale = Math.min(boxW / sw, boxH / sh);
+      const dw = sw * scale, dh = sh * scale;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(sheet, sx, sy, sw, sh, cx - dw / 2, ground - dh, dw, dh);
+      return true;
+    }
+
+    function drawStripOn(ctx, sheet, frame, cols, x, ground, boxH, widthScale = 1) {
+      if (!sheet?.complete || !sheet.naturalWidth) return false;
+      const col = Math.max(0, Math.min(cols - 1, frame | 0));
+      const sw = sheet.naturalWidth / cols, sh = sheet.naturalHeight;
+      return drawFitted(ctx, sheet, col * sw, 0, sw, sh, x, ground, boxH * widthScale, boxH);
+    }
+
+    function drawBeamOn(ctx, sheet, frame, x, ground, width, height) {
+      if (!sheet?.complete || !sheet.naturalWidth) return false;
+      const cols = 4, rows = 3;
+      const sw = sheet.naturalWidth / cols, sh = sheet.naturalHeight / rows;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      if (frame < 4 || frame > 8) {
+        const col = frame % cols, row = Math.floor(frame / cols);
+        return drawFitted(ctx, sheet, col * sw, row * sh, sw, sh, x, ground, width, height);
+      }
+      const sx = (frame % cols) * sw, sy = Math.floor(frame / cols) * sh;
+      const split = sh * 0.12, stripStart = sh * 0.04;
+      const join = ground - height * 0.88, sky = -Math.max(24, height * 0.08);
+      ctx.drawImage(sheet, sx, sy + stripStart, sw, split - stripStart, x - width / 2, sky, width, join - sky);
+      ctx.drawImage(sheet, sx, sy + split, sw, sh - split, x - width / 2, join, width, height * 0.88);
+      return true;
+    }
+
+    function drawGridOn(ctx, sheet, frame, cols, rows, row, x, ground, size) {
+      if (!sheet?.complete || !sheet.naturalWidth) return false;
+      const sw = sheet.naturalWidth / cols, sh = sheet.naturalHeight / rows;
+      return drawFitted(ctx, sheet, frame * sw, row * sh, sw, sh, x, ground, size, size);
+    }
+
+    function currentAttackFrame(atk, age) {
+      if (atk.mode === 'beam') {
+        return age < 0.28
+          ? celHoldFrame(age, 0.28, [0.06, 0.08, 0.1, 0.04])
+          : 4 + celHoldFrame(age - 0.28, Math.max(0.2, 1.4 - 0.28), [0.13, 0.1, 0.16, 0.1, 0.1, 0.08, 0.1, 0.12]);
+      }
+      return celHoldFrame(age, 1.05, [0.12, 0.14, 0.16, 0.2, 0.18, 0.12].slice(0, atk.frames));
+    }
+
+    function paintStripThumbs(atk) {
+      const strip = document.getElementById('fxStrip');
+      if (!strip) return;
+      strip.innerHTML = '';
+      const sheet = attackSheets[atk.file];
+      const paint = () => {
+        strip.innerHTML = '';
+        if (!sheet.complete || !sheet.naturalWidth) {
+          strip.innerHTML = `<span style="color:#f87171">Failed to load ${atk.file}</span>`;
+          return;
+        }
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        for (let f = 0; f < atk.frames; f++) {
+          const c = document.createElement('canvas');
+          const css = 96;
+          c.width = Math.round(css * dpr);
+          c.height = Math.round(css * dpr);
+          c.style.width = css + 'px';
+          c.style.height = css + 'px';
+          strip.appendChild(c);
+          const cctx = c.getContext('2d');
+          cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          cctx.imageSmoothingEnabled = true;
+          cctx.imageSmoothingQuality = 'high';
+          cctx.fillStyle = '#0a1210';
+          cctx.fillRect(0, 0, css, css);
+          let sx, sy, sw, sh;
+          if (atk.mode === 'beam') {
+            const cols = 4, rows = 3;
+            sw = sheet.naturalWidth / cols; sh = sheet.naturalHeight / rows;
+            sx = (f % cols) * sw; sy = Math.floor(f / cols) * sh;
+          } else if (atk.mode === 'pair') {
+            sw = sheet.naturalWidth / atk.cols; sh = sheet.naturalHeight / atk.rows;
+            const row = f < 3 ? 0 : 1, col = f % 3;
+            sx = col * sw; sy = row * sh;
+          } else if (atk.mode === 'bomb' || atk.mode === 'grid') {
+            sw = sheet.naturalWidth / atk.cols; sh = sheet.naturalHeight / atk.rows;
+            sx = f * sw; sy = (atk.row || 0) * sh;
+          } else {
+            sw = sheet.naturalWidth / atk.cols; sh = sheet.naturalHeight;
+            sx = f * sw; sy = 0;
+          }
+          const pad = 8;
+          const box = css - pad * 2;
+          const scale = Math.min(box / sw, box / sh);
+          const dw = sw * scale, dh = sh * scale;
+          cctx.drawImage(sheet, sx, sy, sw, sh, (css - dw) / 2, (css - dh) / 2, dw, dh);
+        }
+      };
+      if (sheet.complete && sheet.naturalWidth) paint();
+      else {
+        sheet.addEventListener('load', paint, { once: true });
+        sheet.addEventListener('error', () => {
+          strip.innerHTML = `<span style="color:#f87171">Load error ${atk.file}</span>`;
+        }, { once: true });
+      }
+    }
+
+    function selectAttack(i) {
+      fxIdx = i;
+      fxAge = 0;
+      const atk = ATTACKS[i];
+      fxHudName.textContent = `${atk.name} · ${atk.label}`;
+      fxHudFrame.textContent = `Frame 1 / ${atk.frames}`;
+      fxMeta.innerHTML = `<b>${atk.name}</b> — ${atk.desc}<div class="fx-strip" id="fxStrip"></div>`;
+      [...fxList.querySelectorAll('button')].forEach((b, n) => b.classList.toggle('active', n === i));
+      paintStripThumbs(atk);
+    }
+
+    ATTACKS.forEach((atk, i) => {
+      const btn = document.createElement('button');
+      if (i === 0) btn.classList.add('active');
+      btn.type = 'button';
+      btn.innerHTML = `<strong>${atk.name}</strong><span>${atk.label}</span>`;
+      btn.onclick = () => selectAttack(i);
+      fxList.appendChild(btn);
+    });
+    if (!fxList.children.length) {
+      fxList.innerHTML = '<p style="color:#f87171">Attack list failed to load — refresh with a cache clear (Ctrl+F5).</p>';
+    } else {
+      selectAttack(0);
+    }
+
+    if (fxReplay) fxReplay.onclick = () => { fxAge = 0; fxPaused = false; if (fxPause) fxPause.textContent = 'Ⅱ Pause'; };
+    if (fxPause) fxPause.onclick = () => {
+      fxPaused = !fxPaused;
+      fxPause.textContent = fxPaused ? '▶ Play' : 'Ⅱ Pause';
+    };
+    if (fxSpeed) fxSpeed.oninput = () => {
+      fxRate = Number(fxSpeed.value) / 100;
+      if (fxSpeedVal) fxSpeedVal.textContent = `${fxRate.toFixed(1)}x`;
+    };
+
+    function animateFx(now) {
+      try {
+        const dt = Math.min(0.05, (now - fxLast) / 1000);
+        fxLast = now;
+        if (!fxPaused) fxAge += dt * fxRate;
+
+        const atk = ATTACKS[fxIdx];
+        const loopDur = atk.mode === 'beam' ? 1.55 : 1.15;
+        if (fxAge > loopDur) fxAge = 0;
+        const frame = currentAttackFrame(atk, fxAge);
+        fxHudFrame.textContent = `Frame ${frame + 1} / ${atk.frames}`;
+
+        const W = fxW, H = fxH;
+        const ground = H * 0.84;
+        fxCtx.setTransform(
+          Math.min(window.devicePixelRatio || 1, 2.5), 0, 0,
+          Math.min(window.devicePixelRatio || 1, 2.5), 0, 0
+        );
+        fxCtx.clearRect(0, 0, W, H);
+
+        if (forestBg.complete && forestBg.naturalWidth) {
+          const tw = H * forestBg.naturalWidth / forestBg.naturalHeight;
+          fxCtx.imageSmoothingEnabled = true;
+          fxCtx.imageSmoothingQuality = 'high';
+          fxCtx.drawImage(forestBg, 0, 0, tw, H);
+          if (tw < W) fxCtx.drawImage(forestBg, tw - 1, 0, tw, H);
+        } else {
+          fxCtx.fillStyle = '#102018';
+          fxCtx.fillRect(0, 0, W, H);
+        }
+        fxCtx.fillStyle = 'rgba(8,16,12,.18)';
+        fxCtx.fillRect(0, 0, W, H);
+
+        fxCtx.strokeStyle = 'rgba(255,72,72,.4)';
+        fxCtx.lineWidth = 2;
+        fxCtx.beginPath(); fxCtx.moveTo(0, ground); fxCtx.lineTo(W, ground); fxCtx.stroke();
+        fxCtx.fillStyle = 'rgba(80,255,120,.7)';
+        fxCtx.beginPath(); fxCtx.ellipse(W * 0.22, ground, 12, 5, 0, 0, Math.PI * 2); fxCtx.fill();
+
+        const sheet = attackSheets[atk.file];
+        const x = W * 0.55;
+        const big = Math.min(H * 0.88, W * 0.48);
+        let drawn = false;
+        if (!sheet?.complete || !sheet.naturalWidth) {
+          fxCtx.fillStyle = 'rgba(248,113,113,.9)';
+          fxCtx.font = '16px sans-serif';
+          fxCtx.fillText(`Loading ${atk.file}…`, W * 0.35, H * 0.5);
+        } else if (atk.mode === 'beam') {
+          const height = Math.min(ground - 6, H * 0.94);
+          drawn = drawBeamOn(fxCtx, sheet, frame, x, ground + 2, height * 0.72, height);
+        } else if (atk.mode === 'pair') {
+          const sw = sheet.naturalWidth / atk.cols, sh = sheet.naturalHeight / atk.rows;
+          const row = frame < 3 ? 0 : 1, col = frame % 3;
+          const size = big * (frame > 2 ? 0.9 : 0.75);
+          drawn = drawFitted(fxCtx, sheet, col * sw, row * sh, sw, sh, x, ground + 2, size, size);
+        } else if (atk.mode === 'bomb') {
+          drawn = drawGridOn(fxCtx, sheet, frame, atk.cols, atk.rows, atk.row, x, ground + 2, big);
+        } else if (atk.mode === 'grid') {
+          drawn = drawGridOn(fxCtx, sheet, frame, atk.cols, atk.rows, atk.row, x, ground + 2, big);
+        } else {
+          const scale = atk.id === 'scythe' ? 1.7 : atk.id === 'hammer' || atk.id === 'tome' ? 1.35 : 1.15;
+          drawn = drawStripOn(fxCtx, sheet, frame, atk.cols, x, ground + 2, big, scale);
+        }
+        if (sheet?.complete && sheet.naturalWidth && !drawn) {
+          fxCtx.fillStyle = 'rgba(248,113,113,.9)';
+          fxCtx.font = '14px sans-serif';
+          fxCtx.fillText('Frame failed to draw', W * 0.4, H * 0.5);
+        }
+
+        const strip = document.getElementById('fxStrip');
+        if (strip) {
+          [...strip.querySelectorAll('canvas')].forEach((c, i) => {
+            c.style.outline = i === frame ? '2px solid #5eead4' : '1px solid #2a3d36';
+          });
+        }
+      } catch (err) {
+        console.error('animateFx', err);
+      }
+      requestAnimationFrame(animateFx);
+    }
+    requestAnimationFrame(animateFx);
+  </script>
+</body>
+</html>

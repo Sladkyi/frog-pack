@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PACK / RUN — Arsenal of 50 Weapons and 12-Frame Attacks</title>
+  <style>
+    :root {
+      --bg: #090e0d;
+      --card-bg: #121c19;
+      --card-bg-hover: #192723;
+      --border: #1f332c;
+      --border-light: #2d473e;
+      --accent: #5eead4;
+      --accent-warm: #f59e0b;
+      --accent-purple: #c084fc;
+      --text: #e6f1ed;
+      --text-muted: #94a39e;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+
+      /* RARITIES */
+      --rarity-common: #94a39e;
+      --rarity-uncommon: #4ade80;
+      --rarity-rare: #38bdf8;
+      --rarity-epic: #c084fc;
+      --rarity-legendary: #f59e0b;
+      --rarity-mythic: #f43f5e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      padding: 24px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 18px;
+    }
+    header h1 {
+      font-size: 28px;
+      color: var(--accent);
+      margin-bottom: 6px;
+      letter-spacing: 0.5px;
+    }
+    header p {
+      color: var(--text-muted);
+      font-size: 15px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .badges-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .badge.common { color: var(--rarity-common); border-color: rgba(148, 163, 158, 0.4); background: rgba(148, 163, 158, 0.1); }
+    .badge.uncommon { color: var(--rarity-uncommon); border-color: rgba(74, 222, 128, 0.4); background: rgba(74, 222, 128, 0.1); }
+    .badge.rare { color: var(--rarity-rare); border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.1); }
+    .badge.epic { color: var(--rarity-epic); border-color: rgba(192, 132, 252, 0.4); background: rgba(192, 132, 252, 0.1); }
+    .badge.legendary { color: var(--rarity-legendary); border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1); }
+    .badge.mythic { color: var(--rarity-mythic); border-color: rgba(244, 63, 94, 0.4); background: rgba(244, 63, 94, 0.1); }
+
+    .layout {
+      max-width: 1440px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+
+    /* FILTERS & SEARCH */
+    .filter-bar {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+    .filter-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      min-width: 80px;
+    }
+    .chip-btn {
+      padding: 6px 14px;
+      border-radius: 8px;
+      background: #0d1613;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+    .chip-btn:hover {
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .chip-btn.active {
+      background: #182b24;
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 10px rgba(94, 234, 212, 0.2);
+    }
+    .search-input {
+      flex: 1;
+      min-width: 220px;
+      padding: 8px 14px;
+      background: #0a110f;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+    .search-input:focus {
+      border-color: var(--accent);
+    }
+
+    /* WEAPONS SCROLLER / SELECTOR */
+    .weapons-catalog {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+      gap: 10px;
+      max-height: 250px;
+      overflow-y: auto;
+      background: #0b1210;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    .weapon-card-btn {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .weapon-card-btn:hover {
+      background: var(--card-bg-hover);
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .weapon-card-btn.active {
+      background: #192d25;
+      border-color: var(--accent-warm);
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+    }
+    .w-icon-box {
+      width: 42px;
+      height: 42px;
+      min-width: 42px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #141e1b;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+    .w-icon-box svg,
+    .w-icon-box img {
+      width: 36px;
+      height: 36px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+    }
+    .w-details {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+      min-width: 0;
+    }
+    .w-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .w-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* MAIN VIEWPORT */
+    .viewports-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+    .viewports-row.split {
+      grid-template-columns: 1fr 1fr;
+    }
+    .canvas-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .canvas-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .canvas-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      height: 380px;
+      background: #080f0d;
+      border-radius: 12px;
+      border: 1px solid #1c2b24;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .overlay-info {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(13, 20, 18, 0.88);
+      backdrop-filter: blur(8px);
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: monospace;
+      font-size: 13px;
+      color: var(--accent);
+      pointer-events: none;
+    }
+
+    /* CONTROLS */
+    .controls-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .btn {
+      padding: 8px 16px;
+      background: #1e332a;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .btn:hover {
+      background: #284438;
+      border-color: var(--accent);
+    }
+    .btn.primary {
+      background: var(--accent);
+      color: #0d1412;
+      border-color: var(--accent);
+    }
+    .btn.primary:hover {
+      background: #7ef2e0;
+    }
+    .slider-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    input[type=range] {
+      accent-color: var(--accent);
+      cursor: pointer;
+      width: 130px;
+    }
+    .scrubber-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+    }
+    .scrubber-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .scrubber-slider {
+      width: 100%;
+      height: 8px;
+    }
+
+    /* 12-FRAME GRID */
+    .frames-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    .frames-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .frames-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 900px) {
+      .frames-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    .frame-thumb {
+      background: #09110f;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .frame-thumb:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .frame-thumb.active {
+      border-color: var(--accent-warm);
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+      background: #141c19;
+    }
+    .frame-thumb-canvas {
+      width: 100%;
+      height: 95px;
+      object-fit: contain;
+    }
+    .frame-index {
+      font-size: 11px;
+      font-family: monospace;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+    .frame-thumb.active .frame-index {
+      color: var(--accent-warm);
+      font-weight: bold;
+    }
+    .frame-phase {
+      font-size: 10px;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-top: 4px;
+      font-weight: 600;
+    }
+    .phase-windup { background: rgba(94, 234, 212, 0.15); color: var(--accent); }
+    .phase-burst { background: rgba(245, 158, 11, 0.2); color: var(--accent-warm); }
+    .phase-sustain { background: rgba(192, 132, 252, 0.2); color: var(--accent-purple); }
+    .phase-fade { background: rgba(148, 163, 158, 0.15); color: var(--text-muted); }
+
+    /* VIEW MODE SWITCHER */
+    .view-mode-tabs {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .mode-tab-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 8px 18px;
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+    .mode-tab-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+    .mode-tab-btn.active {
+      background: var(--accent);
+      color: #0b1411;
+      border-color: var(--accent);
+      box-shadow: 0 0 16px rgba(94, 234, 212, 0.35);
+    }
+
+    /* GALLERY GRID */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+      margin-top: 10px;
+    }
+    .gallery-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .gallery-card:hover {
+      border-color: var(--card-border-hover, var(--accent));
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      background: var(--card-bg-hover);
+    }
+    .gallery-canvas-wrap {
+      position: relative;
+      width: 100%;
+      height: 180px;
+      background: #080f0d;
+      border-radius: 10px;
+      border: 1px solid #1a2923;
+      overflow: hidden;
+    }
+    .gallery-canvas-wrap canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .gallery-card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .gallery-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    .gallery-card-stats {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>PACK / RUN — Arsenal of 50 Weapons (12 Frames)</h1>
+    <p>
+      Interactive lab for 50 weapons across 6 schools and 6 rarity ranks. Each weapon has its own 12-frame attack loop with frame scrubbing and Staff Beam comparison.
+    </p>
+    <div class="badges-row">
+      <span class="badge common">⚪ Common (1.0x)</span>
+      <span class="badge uncommon">🟢 Uncommon (1.25x)</span>
+      <span class="badge rare">🔵 Rare (1.55x)</span>
+      <span class="badge epic">🟣 Epic (1.95x)</span>
+      <span class="badge legendary">🟡 Legendary (2.5x)</span>
+      <span class="badge mythic">🔴 Mythic (3.2x)</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- FILTERS & SEARCH -->
+    <div class="filter-bar">
+      <!-- RARITIES FILTER -->
+      <div class="filter-row">
+        <span class="filter-title">Rarity:</span>
+        <button class="chip-btn active" data-filter-rarity="all">All (50)</button>
+        <button class="chip-btn" data-filter-rarity="common">⚪ Common</button>
+        <button class="chip-btn" data-filter-rarity="uncommon">🟢 Uncommon</button>
+        <button class="chip-btn" data-filter-rarity="rare">🔵 Rare</button>
+        <button class="chip-btn" data-filter-rarity="epic">🟣 Epic</button>
+        <button class="chip-btn" data-filter-rarity="legendary">🟡 Legendary</button>
+        <button class="chip-btn" data-filter-rarity="mythic">🔴 Mythic</button>
+      </div>
+      <!-- SCHOOLS FILTER -->
+      <div class="filter-row">
+        <span class="filter-title">School:</span>
+        <button class="chip-btn active" data-filter-school="all">All schools</button>
+        <button class="chip-btn" data-filter-school="magic">Elemental Magic</button>
+        <button class="chip-btn" data-filter-school="heavy">Heavy</button>
+        <button class="chip-btn" data-filter-school="blades">Blades</button>
+        <button class="chip-btn" data-filter-school="ranged">Ranged</button>
+        <button class="chip-btn" data-filter-school="polearms">Polearms</button>
+        <button class="chip-btn" data-filter-school="relics">Relics</button>
+      </div>
+      <!-- SEARCH -->
+      <div class="filter-row">
+        <span class="filter-title">Search:</span>
+        <input type="text" class="search-input" id="searchInput" placeholder="Search weapons by name or property...">
+        <span id="weaponCountBadge" style="font-size: 13px; color: var(--accent); font-weight: 600;">Found: 50</span>
+      </div>
+    </div>
+
+    <!-- VIEW MODE SWITCHER -->
+    <div class="view-mode-tabs">
+      <button class="mode-tab-btn active" id="btnModeGallery">
+        <span>🎬</span> All Weapons Gallery
+      </button>
+      <button class="mode-tab-btn" id="btnModeInspector">
+        <span>🔍</span> Weapon Inspector & 12-Frame Scrubber
+      </button>
+    </div>
+
+    <!-- GALLERY VIEW -->
+    <div id="viewGallery" style="display: block;">
+      <div class="gallery-grid" id="galleryGrid"></div>
+    </div>
+
+    <!-- INSPECTOR VIEW -->
+    <div id="viewInspector" style="display: none; display: flex; flex-direction: column; gap: 20px;">
+      <!-- WEAPONS SELECTION GRID -->
+      <div class="weapons-catalog" id="weaponsCatalog"></div>
+
+    <!-- MAIN VIEWPORT -->
+    <div class="viewports-row" id="viewportsRow">
+      <!-- MAIN CANVAS -->
+      <div class="canvas-card">
+        <div class="canvas-header">
+          <div class="canvas-title" id="mainTitle">Weapon attack</div>
+          <button class="btn" id="btnSplitView">Compare with Staff Beam</button>
+        </div>
+        <div class="canvas-container">
+          <canvas id="mainCanvas" width="900" height="500"></canvas>
+          <div class="overlay-info" id="mainOverlay">Frame: 0 / 11 | FPS: 12</div>
+        </div>
+      </div>
+
+      <!-- COMPARISON CANVAS (Hidden by default) -->
+      <div class="canvas-card" id="compareCard" style="display: none;">
+        <div class="canvas-header">
+          <div class="canvas-title" style="color: var(--accent-purple);">
+            ★ Reference: Staff Beam (12 frames)
+          </div>
+          <span class="badge legendary">🟡 Legendary</span>
+        </div>
+        <div class="canvas-container">
+          <canvas id="compareCanvas" width="900" height="500"></canvas>
+          <div class="overlay-info" id="compareOverlay">Frame: 0 / 11</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTROLS PANEL -->
+    <div class="controls-panel">
+      <div class="controls-row">
+        <div class="btn-group">
+          <button class="btn primary" id="btnPlay">Pause</button>
+          <button class="btn" id="btnPrev">◀ Prev</button>
+          <button class="btn" id="btnNext">Next ▶</button>
+          <button class="btn" id="btnRestart">To start ↺</button>
+        </div>
+
+        <div class="slider-box">
+          <span>Speed:</span>
+          <input type="range" id="fpsSlider" min="4" max="24" value="12" step="1">
+          <span id="fpsVal" style="font-weight: 600; color: var(--accent);">12 fps</span>
+        </div>
+
+        <div class="slider-box">
+          <span>Scale:</span>
+          <input type="range" id="scaleSlider" min="0.6" max="1.8" value="1.0" step="0.1">
+          <span id="scaleVal">1.0x</span>
+        </div>
+
+        <div class="btn-group">
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer;">
+            <input type="checkbox" id="chkShowGround" checked> Ground
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; margin-left: 10px;">
+            <input type="checkbox" id="chkShowHero" checked> Hero and target
+          </label>
+        </div>
+      </div>
+
+      <!-- SCRUBBER -->
+      <div class="scrubber-wrap">
+        <div class="scrubber-label">
+          <span>Frame timeline</span>
+          <span id="scrubberText" style="font-weight: 600; color: var(--accent-warm);">Frame 0: Gathering energy</span>
+        </div>
+        <input type="range" class="scrubber-slider" id="scrubber" min="0" max="11" value="0" step="1">
+      </div>
+    </div>
+
+    <!-- 12 FRAMES GRID -->
+    <div class="frames-card">
+      <div class="frames-title">
+        <span>12-frame breakdown of the selected weapon</span>
+        <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);">
+          Click a tile to pause and jump to that frame
+        </span>
+      </div>
+      <div class="frames-grid" id="framesGrid"></div>
+    </div>
+    </div><!-- End #viewInspector -->
+  </div><!-- End .layout -->
+
+  <script src="core.js"></script>
+  <script src="weapon-icons.js"></script>
+  <script>
+    const RARITIES = PackCore.RARITIES;
+    const SCHOOLS = PackCore.SCHOOLS;
+    const TYPES = PackCore.TYPES;
+
+    // BUILD 50 WEAPONS REGISTRY
+    const WEAPONS_CATALOG = Object.keys(TYPES)
+      .filter(id => !TYPES[id].gear)
+      .map(id => {
+        const def = TYPES[id];
+        const rarity = RARITIES[def.rarity] || RARITIES.common;
+        const school = SCHOOLS[def.school] || SCHOOLS.magic;
+
+        // Default sheet fallback mapping for demonstration
+        let sheet = 'assets/beam-frames-v2.png';
+        let cols = 4, rows = 3, rowIdx = undefined;
+        let width = 150, height = 250, anchorY = 1.0;
+
+        if (def.school === 'heavy') {
+          sheet = 'assets/slam-frames-v1.png';
+          width = 170; height = 240;
+        } else if (def.school === 'blades') {
+          sheet = 'assets/weapon-frames-v2.png';
+          cols = 6; rows = 4; rowIdx = 1; // slash row
+          width = 190; height = 200;
+        } else if (def.school === 'ranged') {
+          sheet = 'assets/weapon-frames-v2.png';
+          cols = 6; rows = 4; rowIdx = 2; // vortex/shuriken row
+          width = 160; height = 200;
+        } else if (def.school === 'polearms') {
+          sheet = 'assets/rune-frames-v1.png';
+          width = 160; height = 240;
+        } else if (def.school === 'relics') {
+          sheet = 'assets/rune-frames-v1.png';
+          width = 170; height = 240;
+        }
+
+        if (id === 'frost_scepter' || id === 'glacial_estoc') {
+          sheet = 'assets/frost-glacier-fx-v1.png';
+          cols = 4; rows = 3; rowIdx = undefined;
+          width = 200; height = 230; anchorY = 0.95;
+        } else if (id === 'supernova_scroll' || id === 'solar_bow') {
+          sheet = 'assets/supernova-solar-fx-v1.png';
+          cols = 4; rows = 3; rowIdx = undefined;
+          width = 220; height = 240; anchorY = 0.95;
+        } else if (id === 'dragon_pike' || id === 'pyre_orb') {
+          sheet = 'assets/dragon-inferno-fx-v1.png';
+          cols = 4; rows = 3; rowIdx = undefined;
+          width = 210; height = 240; anchorY = 0.95;
+        } else if (id === 'thunder_halberd') {
+          sheet = 'assets/thunder-halberd-fx-v2.png';
+          cols = 4; rows = 3; rowIdx = undefined;
+          width = 72; height = 280; anchorY = 1.0;
+        } else if (id === 'storm') {
+          sheet = 'assets/storm-fx-6f.png';
+          cols = 6; rows = 1; rowIdx = 0;
+          width = 180; height = 210; anchorY = 0.96;
+        } else if (id === 'shuriken' || id === 'gale_shuriken') {
+          sheet = 'assets/shuriken-fx-v2.png';
+          cols = 6; rows = 1; rowIdx = 0;
+          width = 110; height = 110; anchorY = 0.72;
+        } else if (id === 'spear' || id === 'dusk_spear' || id === 'void_glaive') {
+          sheet = 'assets/spear-fx-6f.png';
+          cols = 6; rows = 1; rowIdx = 0;
+          width = 220; height = 180; anchorY = 0.75;
+        } else if (id === 'bomb' || id === 'cinder_flask' || id === 'meteor_flask') {
+          sheet = 'assets/bomb-fx-6f.png';
+          cols = 6; rows = 1; rowIdx = 0;
+          width = 190; height = 210; anchorY = 0.95;
+        } else if (id === 'hammer') {
+          sheet = 'assets/hammer-fx-v4.png';
+          cols = 6; rows = 1; rowIdx = 0;
+          width = 120; height = 120; anchorY = 0.88;
+        } else if (id === 'dagger') {
+          sheet = 'assets/dagger-fx-v3.png';
+          cols = 6; rows = 1; rowIdx = 0;
+          width = 110; height = 110; anchorY = 0.7;
+        } else if (id === 'thunder_hammer' || id === 'holy_flail' || id === 'anvil_drop') {
+          sheet = 'assets/slam-frames-v1.png';
+          cols = 4; rows = 3; rowIdx = undefined;
+          width = 180; height = 250;
+        } else if (id === 'axe' || id === 'demon_axe' || id === 'flame_hatchets') {
+          sheet = 'assets/axe-fx-v3.png';
+          cols = 4; rows = 3; rowIdx = undefined;
+          width = 185; height = 230;
+        } else if (id === 'tome' || id === 'tempest_tome') {
+          sheet = 'assets/tome-fx-v3.png';
+          cols = 4; rows = 3; rowIdx = undefined;
+          width = 210; height = 260; anchorY = 0.85;
+        } else if (id === 'orb' || id === 'astral_mirror') {
+          sheet = 'assets/orb-fx-v3.png';
+          cols = 6; rows = 1; rowIdx = 0;
+          width = 110; height = 110; anchorY = 0.7;
+        } else if (id === 'scythe') {
+          sheet = 'assets/scythe-fx-v4.png';
+          cols = 4; rows = 3; rowIdx = undefined;
+          width = 150; height = 150; anchorY = 0.9;
+        } else if (id === 'blade' || id === 'gale_katana' || id === 'void_greatsword') {
+          sheet = 'assets/blade-fx-6f.png';
+          cols = 6; rows = 1; rowIdx = 0;
+          width = 200; height = 200; anchorY = 0.85;
+        } else         if (id === 'wand') {
+          sheet = 'assets/beam-frames-v2.png';
+          cols = 4; rows = 3; rowIdx = undefined;
+          width = 140; height = 280;
+        }
+
+        const LEGEND_SHEETS = {
+          eclipse_censer: 'assets/eclipse-censer-fx-v2.png',
+          void_greatsword: 'assets/void-greatsword-fx-v2.png',
+          doomsday_bell: 'assets/doomsday-bell-fx-v2.png',
+          bone_scythe: 'assets/bone-scythe-fx-v2.png',
+          phoenix_lance: 'assets/phoenix-lance-fx-v1.png?v=fx2',
+          abyssal_eye: 'assets/abyss-eye-fx-v2.png',
+          demon_axe: 'assets/demon-fx-v2.png',
+          spirit_lance: 'assets/spirit-epic-fx-v2.png',
+          frost_scepter: 'assets/frost-scepter-fx-v2.png',
+          glacial_estoc: 'assets/frost-scepter-fx-v2.png',
+          thunder_hammer: 'assets/thunder-hammer-fx-v2.png',
+          holy_flail: 'assets/holy-flail-fx-v2.png',
+          blood_falchion: 'assets/blood-falchion-fx-v2.png',
+          plague_censer: 'assets/plague-censer-fx-v2.png',
+          astral_mirror: 'assets/astral-mirror-fx-v2.png',
+          starfall_shard: 'assets/starfall-shard-fx-v2.png',
+          tome: 'assets/tome-fx-v4.png',
+          tempest_tome: 'assets/tome-fx-v4.png',
+          solar_bow: 'assets/solar-bow-fx-v2.png',
+          dragon_pike: 'assets/dragon-pike-fx-v1.png',
+          chaos_flail: 'assets/chaos-flail-fx-v1.png',
+          moon_glaive: 'assets/moon-glaive-fx-v1.png',
+          clockwork_trap: 'assets/clockwork-trap-fx-v1.png'
+        };
+        if (LEGEND_SHEETS[id]) {
+          sheet = LEGEND_SHEETS[id];
+          cols = 4; rows = 3; rowIdx = undefined;
+          if (id === 'eclipse_censer' || id === 'abyssal_eye' || id === 'demon_axe') {
+            width = 360; height = 400; anchorY = 1.0;
+          } else if (id === 'spirit_lance') {
+            width = 140; height = 160; anchorY = 1.0;
+          } else if (id === 'frost_scepter' || id === 'glacial_estoc' || id === 'thunder_hammer' || id === 'holy_flail' || id === 'blood_falchion' || id === 'plague_censer' || id === 'astral_mirror' || id === 'starfall_shard' || id === 'tome' || id === 'tempest_tome' || id === 'solar_bow'
+            || id === 'dragon_pike' || id === 'chaos_flail' || id === 'moon_glaive' || id === 'clockwork_trap') {
+            width = 120; height = 135; anchorY = 1.0;
+          } else {
+            width = 220; height = 250; anchorY = 1.0;
+          }
+        }
+
+        const is6Frame = (cols === 6 && (rows === 1 || rowIdx !== undefined));
+        const frameCount = is6Frame ? 6 : 12;
+
+        const phases = frameCount === 6 ? [
+          { name: 'Wind-up', class: 'phase-windup', desc: 'Readying throw / sky discharge' },
+          { name: 'Strike', class: 'phase-burst', desc: 'High-speed flight / descending lightning' },
+          { name: 'IMPACT', class: 'phase-burst', desc: 'Burst contact / ground detonation' },
+          { name: 'Vortex/Shock', class: 'phase-sustain', desc: 'Spinning blades / crackling lightning' },
+          { name: 'Disperse', class: 'phase-fade', desc: 'Air whirl / dissipating arcs' },
+          { name: 'Fade', class: 'phase-fade', desc: 'Smoke puff / fading sparks' }
+        ] : [
+          { name: 'Gather', class: 'phase-windup', desc: 'Charging magic and wind-up' },
+          { name: 'Gather', class: 'phase-windup', desc: 'Trajectory speeding up' },
+          { name: 'Wind-up', class: 'phase-windup', desc: 'Peak readiness to strike' },
+          { name: 'Descent', class: 'phase-burst', desc: 'Swift flight toward the target' },
+          { name: 'IMPACT', class: 'phase-burst', desc: 'Point of maximum contact' },
+          { name: 'Blast', class: 'phase-burst', desc: 'Explosive pulse and power ring' },
+          { name: 'PEAK', class: 'phase-sustain', desc: 'Seismic/light split' },
+          { name: 'Wave', class: 'phase-sustain', desc: 'Expanding shockwave' },
+          { name: 'Shards', class: 'phase-fade', desc: 'Flying debris and sparks' },
+          { name: 'Smoke', class: 'phase-fade', desc: 'Billowing smoke trails' },
+          { name: 'Embers', class: 'phase-fade', desc: 'Falling hot sparks' },
+          { name: 'Fade', class: 'phase-fade', desc: 'Effect dissolving into air' }
+        ];
+
+        return {
+          id,
+          name: def.name,
+          rarity: def.rarity || 'common',
+          rarityObj: rarity,
+          school: def.school || 'magic',
+          schoolObj: school,
+          w: def.w, h: def.h,
+          color: def.color,
+          damage: def.damage,
+          cooldown: def.cooldown,
+          manaCost: def.manaCost,
+          desc: def.descriptions[0],
+          descriptions: def.descriptions,
+          sheet, cols, rows, rowIdx, width, height, anchorY,
+          frameCount,
+          phases
+        };
+      });
+
+    // STATE
+    let selectedWeaponId = 'wand';
+    let currentFrame = 0;
+    let isPlaying = true;
+    let fps = 12;
+    let scale = 1.0;
+    let isSplitView = false;
+    let lastTime = performance.now();
+    let filterRarity = 'all';
+    let filterSchool = 'all';
+    let searchQuery = '';
+
+    // DOM
+    const weaponsCatalog = document.getElementById('weaponsCatalog');
+    const weaponCountBadge = document.getElementById('weaponCountBadge');
+    const mainTitle = document.getElementById('mainTitle');
+    const mainCanvas = document.getElementById('mainCanvas');
+    const mainCtx = mainCanvas.getContext('2d');
+    const mainOverlay = document.getElementById('mainOverlay');
+    const compareCard = document.getElementById('compareCard');
+    const compareCanvas = document.getElementById('compareCanvas');
+    const compareCtx = compareCanvas.getContext('2d');
+    const compareOverlay = document.getElementById('compareOverlay');
+    const viewportsRow = document.getElementById('viewportsRow');
+    const btnSplitView = document.getElementById('btnSplitView');
+
+    const btnPlay = document.getElementById('btnPlay');
+    const btnPrev = document.getElementById('btnPrev');
+    const btnNext = document.getElementById('btnNext');
+    const btnRestart = document.getElementById('btnRestart');
+    const fpsSlider = document.getElementById('fpsSlider');
+    const fpsVal = document.getElementById('fpsVal');
+    const scaleSlider = document.getElementById('scaleSlider');
+    const scaleVal = document.getElementById('scaleVal');
+    const chkShowGround = document.getElementById('chkShowGround');
+    const chkShowHero = document.getElementById('chkShowHero');
+    const scrubber = document.getElementById('scrubber');
+    const scrubberText = document.getElementById('scrubberText');
+    const framesGrid = document.getElementById('framesGrid');
+    const searchInput = document.getElementById('searchInput');
+
+    // IMAGE CACHE
+    const imageCache = {};
+    function loadImage(url) {
+      if (imageCache[url]) return Promise.resolve(imageCache[url]);
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => { imageCache[url] = img; resolve(img); };
+        img.onerror = () => { resolve(null); };
+        img.src = url;
+      });
+    }
+
+    // RENDER CATALOG
+    function renderCatalog() {
+      weaponsCatalog.innerHTML = '';
+      const filtered = WEAPONS_CATALOG.filter(w => {
+        if (filterRarity !== 'all' && w.rarity !== filterRarity) return false;
+        if (filterSchool !== 'all' && w.school !== filterSchool) return false;
+        if (searchQuery && !w.name.toLowerCase().includes(searchQuery) && !w.desc.toLowerCase().includes(searchQuery)) return false;
+        return true;
+      });
+
+      weaponCountBadge.textContent = `Found: ${filtered.length}`;
+
+      filtered.forEach(w => {
+        const btn = document.createElement('div');
+        btn.className = `weapon-card-btn ${w.id === selectedWeaponId ? 'active' : ''}`;
+        btn.style.borderLeft = `4px solid ${w.rarityObj.color}`;
+        btn.onclick = () => selectWeapon(w.id);
+
+        const iconHtml = `<img class="w-icon" src="assets/icons/${w.id}.png" width="36" height="36" alt="${w.name}" onerror="this.outerHTML=WeaponIcons.getWeaponIconSvg('${w.id}',{size:36})" />`;
+
+        btn.innerHTML = `
+          <div class="w-icon-box" style="border-color:${w.rarityObj.color}44; background: radial-gradient(circle, ${w.rarityObj.color}22 0%, #111a16 80%);">
+            ${iconHtml}
+          </div>
+          <div class="w-details">
+            <div class="w-title">
+              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${w.name}</span>
+              <span style="color:${w.color}; font-size:10px; margin-left: 4px;">${w.w}x${w.h}</span>
+            </div>
+            <div class="w-meta">
+              <span style="color:${w.rarityObj.color}; font-weight:600;">${w.rarityObj.name}</span>
+              <span>${w.schoolObj.name}</span>
+            </div>
+          </div>
+        `;
+        weaponsCatalog.appendChild(btn);
+      });
+    }
+
+    function selectWeapon(id) {
+      selectedWeaponId = id;
+      currentFrame = 0;
+      renderCatalog();
+      updateDetails();
+      const weapon = getSelectedWeapon();
+      loadImage(weapon.sheet).then(() => {
+        renderAll();
+      });
+      renderAll();
+    }
+
+    function getSelectedWeapon() {
+      return WEAPONS_CATALOG.find(w => w.id === selectedWeaponId) || WEAPONS_CATALOG[0];
+    }
+
+    function updateDetails() {
+      const w = getSelectedWeapon();
+      const iconHtml = `<img src="assets/icons/${w.id}.png" width="44" height="44" style="object-fit:contain; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.6));" alt="${w.name}" onerror="this.outerHTML=WeaponIcons.getWeaponIconSvg('${w.id}',{size:44})" />`;
+
+      mainTitle.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="w-icon-box" style="width: 50px; height: 50px; min-width: 50px; border-radius: 10px; border-color:${w.rarityObj.color}; box-shadow: 0 0 16px ${w.rarityObj.color}44; background: radial-gradient(circle, ${w.rarityObj.color}33 0%, #131f1a 80%);">
+            ${iconHtml}
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="color:${w.rarityObj.color}; font-size:12px; font-weight: 700; background: ${w.rarityObj.bg || 'rgba(255,255,255,0.1)'}; padding: 2px 6px; border-radius: 4px; border: 1px solid ${w.rarityObj.color}55;">${w.rarityObj.name.toUpperCase()}</span>
+              <span style="font-size: 17px; font-weight: 800; color: #fff;">${w.name}</span>
+              <span style="background: #1e332a; color: var(--accent); padding: 2px 6px; border-radius: 4px; font-size: 11px;">${w.schoolObj.name}</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top: 3px;">
+              Damage: <b style="color:#fff;">${w.damage}</b> | CD: <b style="color:#fff;">${w.cooldown}s</b> | Mana: <b style="color:#fff;">${w.manaCost}</b> | Grid: <b style="color:#fff;">${w.w}×${w.h}</b>
+            </div>
+          </div>
+        </div>
+      `;
+      renderThumbnailsGrid();
+    }
+
+    // DRAW ENGINE
+    function drawFxFrame(ctx, canvas, weapon, frame) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const W = canvas.width, H = canvas.height;
+      const groundY = H * 0.78;
+
+      if (chkShowGround.checked) {
+        const grd = ctx.createLinearGradient(0, groundY, 0, H);
+        grd.addColorStop(0, '#13201a');
+        grd.addColorStop(1, '#0b1310');
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, groundY, W, H - groundY);
+
+        ctx.strokeStyle = '#2d4439';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, groundY);
+        ctx.lineTo(W, groundY);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#3e5c4d';
+        ctx.lineWidth = 1.5;
+        for (let gx = 30; gx < W; gx += 48) {
+          ctx.beginPath();
+          ctx.moveTo(gx, groundY);
+          ctx.lineTo(gx - 3, groundY - 6);
+          ctx.moveTo(gx, groundY);
+          ctx.lineTo(gx + 4, groundY - 8);
+          ctx.stroke();
+        }
+      }
+
+      const impactX = W * 0.62;
+      if (chkShowHero.checked) {
+        const heroX = W * 0.22;
+        ctx.fillStyle = '#10251d55';
+        ctx.beginPath();
+        ctx.ellipse(heroX, groundY + 4, 28, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#3a523a';
+        ctx.strokeStyle = '#1b291d';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(heroX, groundY - 40, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.arc(heroX + 7, groundY - 40, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#10251d55';
+        ctx.beginPath();
+        ctx.ellipse(impactX, groundY + 4, 34, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#6b4578';
+        ctx.strokeStyle = '#27172c';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.ellipse(impactX, groundY - 22, 26, 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(impactX - 6, groundY - 24, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.beginPath();
+        ctx.arc(impactX - 6, groundY - 24, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Draw Sprite Frame
+      const img = imageCache[weapon.sheet];
+      if (img && img.complete && img.naturalWidth) {
+        let sw, sh, sx, sy;
+        if (weapon.rowIdx !== undefined) {
+          sw = img.naturalWidth / weapon.cols;
+          sh = img.naturalHeight / weapon.rows;
+          sx = (frame % weapon.cols) * sw;
+          sy = weapon.rowIdx * sh;
+        } else {
+          sw = img.naturalWidth / weapon.cols;
+          sh = img.naturalHeight / weapon.rows;
+          sx = (frame % weapon.cols) * sw;
+          sy = Math.floor(frame / weapon.cols) * sh;
+        }
+
+        const destW = weapon.width * scale;
+        const destH = weapon.height * scale;
+        const destX = impactX - destW / 2;
+        const destY = groundY - destH * weapon.anchorY;
+
+        ctx.drawImage(img, sx, sy, sw, sh, destX, destY, destW, destH);
+      }
+    }
+
+    function renderAll() {
+      const weapon = getSelectedWeapon();
+      const maxF = weapon.frameCount || 12;
+      currentFrame = currentFrame % maxF;
+      drawFxFrame(mainCtx, mainCanvas, weapon, currentFrame);
+
+      const phase = weapon.phases[currentFrame] || { name: 'Attack', desc: '' };
+      mainOverlay.innerHTML = `Frame: <b>${currentFrame}</b>/${maxF - 1} | Phase: <b>${phase.name}</b> (${phase.desc}) | FPS: <b>${fps}</b>`;
+      scrubber.max = maxF - 1;
+      scrubber.value = currentFrame;
+      scrubberText.innerHTML = `Frame <b>${currentFrame}</b>: <span style="color: ${weapon.color};">${phase.name}</span> — ${phase.desc}`;
+
+      if (isSplitView) {
+        const staffWeapon = WEAPONS_CATALOG.find(w => w.id === 'wand');
+        const staffF = currentFrame % (staffWeapon.frameCount || 12);
+        drawFxFrame(compareCtx, compareCanvas, staffWeapon, staffF);
+        const staffPhase = staffWeapon.phases[staffF] || { name: '', desc: '' };
+        compareOverlay.innerHTML = `Frame: <b>${staffF}</b>/11 | <b>${staffPhase.name}</b> (${staffPhase.desc})`;
+      }
+
+      document.querySelectorAll('.frame-thumb').forEach((el, idx) => {
+        if (idx === currentFrame) {
+          el.classList.add('active');
+        } else {
+          el.classList.remove('active');
+        }
+      });
+    }
+
+    function renderThumbnailsGrid() {
+      framesGrid.innerHTML = '';
+      const weapon = getSelectedWeapon();
+      const count = weapon.frameCount || 12;
+
+      for (let f = 0; f < count; f++) {
+        const thumb = document.createElement('div');
+        thumb.className = `frame-thumb ${f === currentFrame ? 'active' : ''}`;
+        thumb.onclick = () => {
+          currentFrame = f;
+          isPlaying = false;
+          btnPlay.textContent = 'Play ▶';
+          renderAll();
+        };
+
+        const tCanvas = document.createElement('canvas');
+        tCanvas.className = 'frame-thumb-canvas';
+        tCanvas.width = 180;
+        tCanvas.height = 140;
+        const tCtx = tCanvas.getContext('2d');
+
+        loadImage(weapon.sheet).then(img => {
+          if (!img || !img.naturalWidth) return;
+          let sw, sh, sx, sy;
+          if (weapon.rowIdx !== undefined) {
+            sw = img.naturalWidth / weapon.cols;
+            sh = img.naturalHeight / weapon.rows;
+            sx = (f % weapon.cols) * sw;
+            sy = weapon.rowIdx * sh;
+          } else {
+            sw = img.naturalWidth / weapon.cols;
+            sh = img.naturalHeight / weapon.rows;
+            sx = (f % weapon.cols) * sw;
+            sy = Math.floor(f / weapon.cols) * sh;
+          }
+
+          tCtx.clearRect(0, 0, 180, 140);
+          tCtx.fillStyle = '#0c1613';
+          tCtx.fillRect(0, 0, 180, 140);
+
+          tCtx.strokeStyle = '#23382f';
+          tCtx.lineWidth = 1;
+          tCtx.beginPath();
+          tCtx.moveTo(10, 120);
+          tCtx.lineTo(170, 120);
+          tCtx.stroke();
+
+          const aspect = sw / sh;
+          const fitH = 95;
+          const fitW = fitH * aspect;
+          tCtx.drawImage(img, sx, sy, sw, sh, (180 - fitW) / 2, 120 - fitH, fitW, fitH);
+        });
+
+        const phase = weapon.phases[f] || { name: 'Frame', class: 'phase-windup', desc: '' };
+        thumb.appendChild(tCanvas);
+        const infoDiv = document.createElement('div');
+        infoDiv.innerHTML = `
+          <div class="frame-index">FRAME #${f}</div>
+          <div class="frame-phase ${phase.class}">${phase.name}</div>
+        `;
+        thumb.appendChild(infoDiv);
+
+        framesGrid.appendChild(thumb);
+      }
+    }
+
+    function animate(now) {
+      if (isPlaying) {
+        const weapon = getSelectedWeapon();
+        const maxF = weapon.frameCount || 12;
+        const interval = 1000 / fps;
+        if (now - lastTime >= interval) {
+          currentFrame = (currentFrame + 1) % maxF;
+          lastTime = now;
+          renderAll();
+        }
+      }
+      requestAnimationFrame(animate);
+    }
+
+    // EVENT LISTENERS
+    btnPlay.onclick = () => {
+      isPlaying = !isPlaying;
+      btnPlay.textContent = isPlaying ? 'Pause' : 'Play ▶';
+      btnPlay.className = `btn ${isPlaying ? 'primary' : ''}`;
+    };
+
+    btnPrev.onclick = () => {
+      const weapon = getSelectedWeapon();
+      const maxF = weapon.frameCount || 12;
+      isPlaying = false;
+      btnPlay.textContent = 'Play ▶';
+      currentFrame = (currentFrame - 1 + maxF) % maxF;
+      renderAll();
+    };
+
+    btnNext.onclick = () => {
+      const weapon = getSelectedWeapon();
+      const maxF = weapon.frameCount || 12;
+      isPlaying = false;
+      btnPlay.textContent = 'Play ▶';
+      currentFrame = (currentFrame + 1) % maxF;
+      renderAll();
+    };
+
+    btnRestart.onclick = () => {
+      currentFrame = 0;
+      renderAll();
+    };
+
+    fpsSlider.oninput = e => {
+      fps = parseInt(e.target.value);
+      fpsVal.textContent = `${fps} fps`;
+      renderAll();
+    };
+
+    scaleSlider.oninput = e => {
+      scale = parseFloat(e.target.value);
+      scaleVal.textContent = `${scale.toFixed(1)}x`;
+      renderAll();
+    };
+
+    scrubber.oninput = e => {
+      isPlaying = false;
+      btnPlay.textContent = 'Play ▶';
+      currentFrame = parseInt(e.target.value);
+      renderAll();
+    };
+
+    chkShowGround.onchange = renderAll;
+    chkShowHero.onchange = renderAll;
+
+    btnSplitView.onclick = () => {
+      isSplitView = !isSplitView;
+      if (isSplitView) {
+        btnSplitView.textContent = 'Hide comparison';
+        compareCard.style.display = 'flex';
+        viewportsRow.classList.add('split');
+      } else {
+        btnSplitView.textContent = 'Compare with Staff Beam';
+        compareCard.style.display = 'none';
+        viewportsRow.classList.remove('split');
+      }
+      renderAll();
+    };
+
+    // VIEW MODE SWITCHING
+    let currentViewMode = 'gallery';
+    const btnModeGallery = document.getElementById('btnModeGallery');
+    const btnModeInspector = document.getElementById('btnModeInspector');
+    const viewGallery = document.getElementById('viewGallery');
+    const viewInspector = document.getElementById('viewInspector');
+    const galleryGrid = document.getElementById('galleryGrid');
+    const galleryCardsData = [];
+
+    function setViewMode(mode) {
+      currentViewMode = mode;
+      if (mode === 'gallery') {
+        btnModeGallery.classList.add('active');
+        btnModeInspector.classList.remove('active');
+        viewGallery.style.display = 'block';
+        viewInspector.style.display = 'none';
+        renderGallery();
+      } else {
+        btnModeInspector.classList.add('active');
+        btnModeGallery.classList.remove('active');
+        viewGallery.style.display = 'none';
+        viewInspector.style.display = 'flex';
+        renderCatalog();
+        updateDetails();
+        renderAll();
+      }
+    }
+
+    btnModeGallery.onclick = () => setViewMode('gallery');
+    btnModeInspector.onclick = () => setViewMode('inspector');
+
+    function renderGallery() {
+      galleryGrid.innerHTML = '';
+      galleryCardsData.length = 0;
+
+      const filtered = WEAPONS_CATALOG.filter(w => {
+        if (filterRarity !== 'all' && w.rarity !== filterRarity) return false;
+        if (filterSchool !== 'all' && w.school !== filterSchool) return false;
+        if (searchQuery && !w.name.toLowerCase().includes(searchQuery) && !w.desc.toLowerCase().includes(searchQuery)) return false;
+        return true;
+      });
+
+      weaponCountBadge.textContent = `Found: ${filtered.length}`;
+
+      filtered.forEach(w => {
+        const card = document.createElement('div');
+        card.className = 'gallery-card';
+        card.style.setProperty('--card-border-hover', w.rarityObj.color);
+
+        const iconHtml = `<img src="assets/icons/${w.id}.png" width="30" height="30" style="object-fit:contain;" alt="${w.name}" onerror="this.outerHTML=WeaponIcons.getWeaponIconSvg('${w.id}',{size:30})" />`;
+
+        card.innerHTML = `
+          <div class="gallery-card-header">
+            <div class="w-icon-box" style="width: 38px; height: 38px; min-width: 38px; border-color:${w.rarityObj.color}; box-shadow: 0 0 10px ${w.rarityObj.color}33;">
+              ${iconHtml}
+            </div>
+            <div style="flex:1; min-width:0;">
+              <div class="gallery-card-title">${w.name}</div>
+              <div style="font-size:10px; color:${w.rarityObj.color}; font-weight:700;">${w.rarityObj.name.toUpperCase()} · ${w.schoolObj.name}</div>
+            </div>
+          </div>
+          <div class="gallery-canvas-wrap">
+            <canvas width="400" height="260"></canvas>
+          </div>
+          <div class="gallery-card-stats">
+            <span>Dmg: <b style="color:#fff;">${w.damage}</b></span>
+            <span>CD: <b style="color:#fff;">${w.cooldown}s</b></span>
+            <span>Mana: <b style="color:#fff;">${w.manaCost}</b></span>
+            <span>Grid: <b style="color:#fff;">${w.w}×${w.h}</b></span>
+          </div>
+        `;
+
+        card.onclick = () => {
+          selectedWeaponId = w.id;
+          setViewMode('inspector');
+        };
+
+        const canvas = card.querySelector('canvas');
+        const ctx = canvas.getContext('2d');
+        galleryCardsData.push({ weapon: w, canvas, ctx });
+        galleryGrid.appendChild(card);
+      });
+    }
+
+    function renderGalleryFrames() {
+      if (currentViewMode !== 'gallery') return;
+      galleryCardsData.forEach(item => {
+        const f = currentFrame % (item.weapon.frameCount || 12);
+        drawFxFrame(item.ctx, item.canvas, item.weapon, f);
+      });
+    }
+
+    // FILTER BUTTONS
+    document.querySelectorAll('[data-filter-rarity]').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('[data-filter-rarity]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        filterRarity = btn.getAttribute('data-filter-rarity');
+        if (currentViewMode === 'gallery') renderGallery();
+        else renderCatalog();
+      };
+    });
+
+    document.querySelectorAll('[data-filter-school]').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('[data-filter-school]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        filterSchool = btn.getAttribute('data-filter-school');
+        if (currentViewMode === 'gallery') renderGallery();
+        else renderCatalog();
+      };
+    });
+
+    searchInput.oninput = e => {
+      searchQuery = e.target.value.toLowerCase().trim();
+      if (currentViewMode === 'gallery') renderGallery();
+      else renderCatalog();
+    };
+
+    // UPDATE ANIMATION LOOP
+    const origAnimate = animate;
+    function animateLoop(now) {
+      if (isPlaying) {
+        const interval = 1000 / fps;
+        if (now - lastTime >= interval) {
+          currentFrame = (currentFrame + 1) % 12;
+          lastTime = now;
+          if (currentViewMode === 'gallery') {
+            renderGalleryFrames();
+          } else {
+            renderAll();
+          }
+        }
+      }
+      requestAnimationFrame(animateLoop);
+    }
+
+    // INIT
+    const uniqueSheets = Array.from(new Set(WEAPONS_CATALOG.map(w => w.sheet)));
+    Promise.all(uniqueSheets.map(s => loadImage(s))).then(() => {
+      renderGallery();
+      renderCatalog();
+      updateDetails();
+      renderAll();
+      requestAnimationFrame(animateLoop);
+    });
+  </script>
+</body>
+</html>
