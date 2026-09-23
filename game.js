@@ -248,7 +248,8 @@ function icon(type,level=1) {
     }
   }
   const clip=`item-crop-${++iconSerial}`;
-  return `<svg class="sprite-icon" viewBox="${x} ${y} ${w} ${h}" aria-hidden="true"><defs><clipPath id="${clip}" clipPathUnits="userSpaceOnUse"><rect x="${x}" y="${y}" width="${w}" height="${h}" /></clipPath></defs><image href="${path}" width="${iw}" height="${ih}" clip-path="url(#${clip})" /></svg>`;
+  // Explicit square + meet: WebKit otherwise sizes from the full atlas <image> and clips the art.
+  return `<svg class="sprite-icon" viewBox="${x} ${y} ${w} ${h}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><defs><clipPath id="${clip}" clipPathUnits="userSpaceOnUse"><rect x="${x}" y="${y}" width="${w}" height="${h}" /></clipPath></defs><image href="${path}" x="0" y="0" width="${iw}" height="${ih}" clip-path="url(#${clip})" /></svg>`;
 }
 function reset(stageIndex=0, opts={}) {
   const stage=STAGES[stageIndex],offset=stage.firstWave-1,startBiome=stageBiomeIndex(stageIndex);
@@ -364,6 +365,7 @@ function renderInventory() {
   inv.style.setProperty('--bag-cells',bagSize());
   inv.setAttribute('aria-label',`Backpack ${bagSize()} by ${bagSize()}`);
   const current = selectedItem();
+  const spare = spareItems();
   for (let y = 0; y < bagSize(); y++) for (let x = 0; x < bagSize(); x++) {
     const cell = document.createElement('button'); cell.className = 'cell'; cell.style.gridArea = `${y + 1} / ${x + 1}`; cell.textContent = '·'; cell.setAttribute('aria-label', `Cell ${x + 1}, ${y + 1}`);
     if (current && canPlace(state.items, current, x, y)) cell.className += ' valid';
@@ -378,9 +380,9 @@ function renderInventory() {
       : PackCore.linkMul(state.items, item, bagSize()) >= 1;
     const pacts = d.gear ? [] : PackCore.synergiesFor(state.items, item);
     const pack = bagSize() >= 5;
-    b.className = `inv-item rarity-${d.rarity || 'common'}${item.id === selected ? ' selected' : ''}${canMerge ? ' mergeable' : ''}${mergedId === item.id ? ' just-merged' : ''}${live ? ' is-linked' : pack ? ' is-isolated' : ''}${pacts.length ? ' is-synergy' : ''}`;
+    b.className = `inv-item rarity-${d.rarity || 'common'}${item.id === selected ? ' selected' : ''}${canMerge ? ' mergeable' : ''}${mergedId === item.id ? ' just-merged' : ''}${live ? ' is-linked' : pack ? ' is-isolated' : ''}${pacts.length ? ' is-synergy' : ''}${spare.has(item.id) ? ' is-spare' : ''}`;
     b.style.cssText = `grid-area:${item.y + 1}/${item.x + 1}/span ${item.h}/span ${item.w};--item-color:${rarity.color}`;
-    const pactMark = pacts.length ? `<span class="pact-badge">${pacts[0].name}</span>` : '';
+    const pactMark = spare.has(item.id) ? '<span class="spare-badge">SPARE</span>' : pacts.length ? `<span class="pact-badge">${pacts[0].name}</span>` : '';
     b.innerHTML = `${icon(item.type,item.level)}${pactMark}<span class="tier" style="color:${rarity.color}">${'◆'.repeat(item.level)}</span><span class="rarity-tag" style="color:${rarity.color}">${rarity.name}</span>${canMerge ? '<span class="merge-badge">↑</span>' : ''}`;
     b.title = `${rarity.name} · ${d.name} · lv. ${item.level}${d.role ? ' · ' + PackCore.ROLES[d.role].name : ''} · ${d.descriptions[item.level - 1]}${d.aspect ? ' · ' + aspectHint(d.aspect) : ''}${pacts.length ? ' · ' + pacts.map(p => p.name).join(' + ') : ''}`; b.setAttribute('aria-label', b.title);
     b.onclick = () => {
@@ -411,9 +413,23 @@ function renderInventory() {
   }
   const aspectLine = curDef?.aspect ? ` ${aspectHint(curDef.aspect)}.` : '';
   const role = curDef && !curDef.gear ? PackCore.ROLES[curDef.role] : null;
-  const roleLine = role ? ` ${role.name}: ${role.hint}.` : '';
+  const roleLine = role ? ` <b class="role-rule">${role.name}: ${role.counter}.</b> ${role.hint}.` : '';
   const cost = role ? ` · ✦${PackCore.manaCost(current, progress.upgrades)}` : '';
-    $('item-detail').innerHTML = current ? `<b style="color:${curRarity.color}">${curDef.name} · lv. ${current.level}</b><span class="rarity-detail" style="color:${curRarity.color}">${curRarity.name}${role ? ' · ' + role.name : ''} · ${current.w}×${current.h}${cost}</span><p>${curDef.descriptions[current.level - 1]}${roleLine}${aspectLine}${formation}</p>` : '';
+  const spareLine = current && spare.has(current.id) ? ` <b class="spare-rule">Spare: only the best copy ${curDef.gear ? 'counts' : 'fires'}. Merge it or drop it.</b>` : '';
+  const stats = role && state.items.includes(current) ? `<span class="item-stats">${pressStats(current)}</span>` : '';
+    $('item-detail').innerHTML = current ? `<b style="color:${curRarity.color}">${curDef.name} · lv. ${current.level}</b><span class="rarity-detail" style="color:${curRarity.color}">${curRarity.name}${role ? ' · ' + role.name : ''} · ${current.w}×${current.h}${cost}</span>${stats}<p>${curDef.descriptions[current.level - 1]}${spareLine}${roleLine}${aspectLine}${formation}</p>` : '';
+}
+// Only the best copy of a type fires (weapons) or applies (gear); everything else is dead weight in the bag.
+function spareItems() {
+  const best = new Map();
+  for (const item of state.items) { const top = best.get(item.type); if (!top || top.level < item.level) best.set(item.type, item); }
+  return new Set(state.items.filter(i => best.get(i.type) !== i).map(i => i.id));
+}
+function pressStats(item) {
+  const def = TYPES[item.type], burstMul = def.role === 'burst' ? PackCore.BURST_MUL : 1;
+  const press = Math.round(attackDamage(item) * itemShots(item) * burstMul), cost = attackManaCost(item);
+  const cd = def.cooldown / PackCore.hasteFor(state.items, item);
+  return `Hit ${press} · ✦${cost} · ${cd.toFixed(1)}s · ${(press / cost).toFixed(1)} per ✦`;
 }
 function seamKind(a, b) {
   const da = TYPES[a.type], db = TYPES[b.type];
@@ -446,8 +462,9 @@ function renderLoot() {
   state.loot.forEach(item => {
     const d = TYPES[item.type], b = document.createElement('button'), target = matching(item);
     const rarity = PackCore.RARITIES[d.rarity] || PackCore.RARITIES.common;
-    const tag = target ? 'Merge' : (d.gear ? 'Gear' : 'New');
-    b.className = `loot-card rarity-${d.rarity || 'common'}${selected === item.id ? ' selected' : ''}${target ? ' upgrade' : ''}`;
+    const owned = state.items.some(i => i.type === item.type);
+    const tag = target ? 'Merge' : owned ? 'Spare' : (d.gear ? 'Gear' : 'New');
+    b.className = `loot-card rarity-${d.rarity || 'common'}${selected === item.id ? ' selected' : ''}${target ? ' upgrade' : ''}${!target && owned ? ' spare' : ''}`;
     b.style.setProperty('--rarity-color', rarity.color);
     b.innerHTML = `${icon(item.type,item.level)}<div><b style="color:${rarity.color}">${d.name}</b><small style="color:${rarity.color}">${tag}</small></div><span class="tier" style="color:${rarity.color}">${'◆'.repeat(item.level)}</span>`;
     b.setAttribute('aria-label', `${d.name}: ${target ? 'drag onto its pair to merge' : 'drag into the backpack'}`);
@@ -714,11 +731,13 @@ function updateAttackButtons(){
   bar.datasetKey=signature;bar.innerHTML='';bar.attackButtons=[];
   for(const item of choices){
    const button=document.createElement('button');button.className='attack-button';
-   const cost=PackCore.manaCost(item,progress.upgrades);
-   button.innerHTML=icon(item.type,item.level)+`<span class="attack-level">${item.level}</span><span class="attack-mana">${cost}✦</span>${TYPES[item.type].aspect?`<span class="attack-aspect ${TYPES[item.type].aspect}"></span>`:''}`;
+   const cost=PackCore.manaCost(item,progress.upgrades),role=PackCore.ROLES[TYPES[item.type].role];
+   button.className=`attack-button role-${role.id}`;
+   button.innerHTML=icon(item.type,item.level)+`<span class="attack-level">${item.level}</span><span class="attack-mana">${cost}✦</span><span class="attack-role">${role.tag}</span>${TYPES[item.type].aspect?`<span class="attack-aspect ${TYPES[item.type].aspect}"></span>`:''}`;
    const timer=document.createElement('span');timer.className='attack-timer';button.append(timer);
    const aspectName=TYPES[item.type].aspect?`, ${ASPECT_LABEL[TYPES[item.type].aspect]}`:'';
-   button.setAttribute('aria-label',`${TYPES[item.type].name}${aspectName}, level ${item.level}, mana ${cost}`);
+   button.title=`${TYPES[item.type].name} · ${role.name}: ${role.counter} · ✦${cost}`;
+   button.setAttribute('aria-label',`${TYPES[item.type].name}${aspectName}, ${role.name}, level ${item.level}, mana ${cost}`);
    button.onclick=()=>{manualAttack(item.id);updateAttackButtons();};
    bar.append(button);bar.attackButtons.push({button,timer,item});
   }
@@ -727,7 +746,12 @@ function updateAttackButtons(){
  const idle=(state.encounterTime||0)-(state.lastAttackAt||0);
  const foesInView=state.phase==='combat'&&state.enemies.some(e=>e.hp>0&&e.x<W-5);
  const nudge=foesInView&&idle>(state.stageIndex<3?1.2:3);
+ const counters=roleCounters();
+ $('mana-fill').classList.toggle('focus',state.phase==='combat'&&!!state.focus);
  for(const {button,timer,item} of bar.attackButtons||[]){
+  const role=TYPES[item.type].role;
+  button.classList.toggle('is-urgent',counters.urgent.has(role));
+  button.classList.toggle('is-counter',!counters.urgent.has(role)&&counters.on.has(role));
   const cd=Math.max(0,state.cooldowns[item.id]||0),total=TYPES[item.type].cooldown/PackCore.hasteFor(state.items,item);
   const cost=PackCore.manaCost(item,progress.upgrades),lowMana=(state.mana||0)<cost;
   button.disabled=state.mode!=='running'||state.phase!=='combat'||cd>0||state.attackLock>0||state.loadingAssets||lowMana;
@@ -797,7 +821,7 @@ function drawCorpses() {
     ctx.beginPath(); ctx.ellipse(c.x, ground, c.size * (.6 + 1.8 * t) * s, c.size * (.18 + .4 * t) * s, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
   }
 }
-function hit(enemy, dmg, color, aspect) {
+function hit(enemy, dmg, color, aspect, role) {
   if (enemy.hp <= 0) return;
   let crit = false;
   if (aspect && enemy.aspect) {
@@ -806,9 +830,14 @@ function hit(enemy, dmg, color, aspect) {
     if (mul > 1) { color = '#f6e7a2'; crit = true; }
     else if (mul < 1) color = '#9aa094';
   }
-  if(enemy.barrier>0){enemy.barrier--;dmg*=.2;burst(enemy.x,enemy.y-enemy.size,'#a6e8f4',8);}
-  dmg=Math.max(1,Math.round(dmg*(ENEMY_KINDS[enemy.kind]?.armor||1)));
-  if(ENEMY_KINDS[enemy.kind]?.shield&&(enemy.age||0)%5<1.6)dmg=Math.max(1,Math.round(dmg*.4));
+  // Role counters: Pierce ignores barriers, Burst ignores armor, Blight stops healing.
+  if(enemy.barrier>0){enemy.barrier--;if(role!=='pierce')dmg*=.2;burst(enemy.x,enemy.y-enemy.size,'#a6e8f4',8);}
+  const kind=ENEMY_KINDS[enemy.kind];
+  dmg=Math.max(1,Math.round(dmg*(role==='burst'?1:kind?.armor||1)));
+  if(kind?.shield&&(enemy.age||0)%5<1.6)dmg=Math.max(1,Math.round(dmg*.4));
+  if(enemy.stun>0){dmg=Math.round(dmg*STAGGER_VULN);crit=true;}
+  if(role==='dot')enemy.blight=BLIGHT_TIME;
+  if(enemy.windup>0){enemy.windupDmg=(enemy.windupDmg||0)+dmg*(role==='burst'?BURST_STAGGER:1);checkStagger(enemy);}
   enemy.hp -= dmg;
   const killed=enemy.hp<=0;
   enemy.hit = killed?.38:.28;
@@ -820,7 +849,7 @@ function hit(enemy, dmg, color, aspect) {
     age: 0, vx: (Math.random() - .5) * 40, vy: killed ? -120 : -85 });
   if (killed) spawnCorpse(enemy);
   if (!killed && enemy.boss && !enemy.almost && enemy.hp < enemy.maxHp * .2) { enemy.almost = true; announce('ALMOST!'); beep(330, .1, 'square', .025); }
-  if (killed) { enemy.aspectLock = null; state.kills++; registerKill(enemy); state.mana=Math.min(state.maxMana||100,(state.mana||0)+12); beep(120 + Math.random() * 100 + (state.combo?.count || 0) * 18, .045, 'triangle', .018);
+  if (killed) { enemy.aspectLock = null; state.kills++; registerKill(enemy); state.mana=Math.min(state.maxMana||100,(state.mana||0)+(enemy.boss?0:enemy.elite?ELITE_KILL_MANA:KILL_MANA)); beep(120 + Math.random() * 100 + (state.combo?.count || 0) * 18, .045, 'triangle', .018);
     const split=ENEMY_KINDS[enemy.kind]?.split;if(split){spawnOffspring(enemy,split);spawnOffspring(enemy,split);}
   }
 }
@@ -1057,8 +1086,10 @@ function enemyDraw(e) {
     ctx.drawImage(enemySheet,cell%4*sw,sy,sw,sh,e.x-size/2,y+size*.08-height,size,height);ctx.restore();
     if(e.corpse)return;
     if(kind.shield&&(e.age||0)%5<1.6){ctx.strokeStyle='#99edff';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(e.x,y-size*.4,size*.48,size*.55,0,0,Math.PI*2);ctx.stroke();}
-    if(e.hp<e.maxHp||e.boss){const bw=e.boss?100:s*2,bh=e.boss?6:4,barY=y+size*.08-height-5;ctx.fillStyle='#1d322a';ctx.fillRect(e.x-bw/2,barY,bw,bh);ctx.fillStyle=bossBarColor(e);ctx.fillRect(e.x-bw/2,barY,bw*e.hp/e.maxHp,bh);}
+    const bw=e.boss?100:s*2,barY=y+size*.08-height-5;
+    if(e.hp<e.maxHp||e.boss){const bh=e.boss?6:4;ctx.fillStyle='#1d322a';ctx.fillRect(e.x-bw/2,barY,bw,bh);ctx.fillStyle=bossBarColor(e);ctx.fillRect(e.x-bw/2,barY,bw*e.hp/e.maxHp,bh);}
     drawAspectPip(e, e.x, y+size*.08-height-14);
+    drawBossTells(e, barY, bw);
     return;
   }
   if (atlas.complete && atlas.naturalWidth) {
@@ -1069,6 +1100,7 @@ function enemyDraw(e) {
     if (e.corpse) return;
     if (e.hp < e.maxHp || e.boss) { const bw = e.boss ? 100 : s * 2; ctx.fillStyle = '#1d322a'; ctx.fillRect(e.x - bw / 2, y - size - 7, bw, 4); ctx.fillStyle = e.boss ? '#efac7e' : '#b8d88f'; ctx.fillRect(e.x - bw / 2, y - size - 7, bw * e.hp / e.maxHp, 4); }
     drawAspectPip(e, e.x, y - size - 16);
+    drawBossTells(e, y - size - 7, e.boss ? 100 : s * 2);
     return;
   }
   if (e.boss) {

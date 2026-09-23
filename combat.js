@@ -9,6 +9,17 @@ const ATTACK_LOCK = .45;
 const COMBO_WINDOW = 2.2;
 const FRENZY_AT = 8;
 const FRENZY_MANA = 30;
+// Mana is the real budget: holding fire for FOCUS_DELAY multiplies regen, so spamming every button starves you.
+const FOCUS_DELAY = 1.5;
+const FOCUS_MUL = 1.8;
+const KILL_MANA = 5, ELITE_KILL_MANA = 10;
+const BLIGHT_TIME = 3;
+// Bosses telegraph a signature move; enough damage during the wind-up staggers them into a vulnerable window.
+const BOSS_FIRST_SIG = 3.2, BOSS_SIG_GAP = 6.5, BOSS_WINDUP = 1.8;
+const STAGGER_SHARE = .09, STAGGER_TIME = 2.4, STAGGER_VULN = 1.3, BURST_STAGGER = 2;
+const SLAM_POWER = 2.2, MEND_SHARE = .1;
+const BOSS_PHASES = [.66, .33];
+const SIG_LABEL = { slam: 'SMASH', brood: 'BROOD', mend: 'MEND' };
 function registerKill(enemy){
   const c=state.combo||(state.combo={count:0,timer:0,pop:0});
   c.count++;c.timer=COMBO_WINDOW;c.pop=1;
@@ -56,8 +67,71 @@ Object.assign(ENEMY_KINDS,{
   ashLord:{...ENEMY_KINDS.swampLord,name:'ASH LORD',power:9,rage:true,hue:310,aspect:'ember'},
   frostWarden:{...ENEMY_KINDS.crystalGolem,name:'FROST WARDEN',barrier:3,hue:60,aspect:'frost'},
  eclipseKeeper:{...ENEMY_KINDS.mushroomKing,name:'ECLIPSE KEEPER',shield:true,summon:true,hue:210},
- worldHeart:{...ENEMY_KINDS.ancientTree,name:'WORLD HEART',power:12,rage:true,summon:true,aura:1.12,hue:35}
+  worldHeart:{...ENEMY_KINDS.ancientTree,name:'WORLD HEART',power:12,rage:true,summon:true,aura:1.12,hue:35}
 });
+// Signature rotation per boss: what happens when a wind-up is not broken.
+const BOSS_SIGNATURES={
+ mushroomKing:['slam','brood'],ancientTree:['slam','mend'],spiderQueen:['brood','slam'],swampLord:['mend','slam'],
+ crystalGolem:['slam'],broodMother:['brood','slam'],nightWing:['slam'],ashLord:['slam'],frostWarden:['slam'],
+ eclipseKeeper:['brood','mend'],worldHeart:['slam','brood','mend']
+};
+function armBoss(e){
+  Object.assign(e,{sigClock:0,sigAt:BOSS_FIRST_SIG,sigGap:BOSS_SIG_GAP,sigIndex:0,windup:0,windupMax:0,windupDmg:0,stun:0,bossPhase:0,sig:null});
+}
+function bossSignature(e){const list=BOSS_SIGNATURES[e.kind]||['slam'];return list[e.sigIndex%list.length];}
+function staggerNeed(e){return e.maxHp*STAGGER_SHARE;}
+function checkStagger(e){
+  if(!(e.windup>0)||e.windupDmg<staggerNeed(e))return false;
+  e.windup=0;e.stun=STAGGER_TIME;e.sigIndex++;e.sigAt=e.sigClock+e.sigGap;
+  state.hitstop=Math.max(state.hitstop||0,.12);state.shake=Math.max(state.shake||0,10);state.flash=Math.max(state.flash||0,.35);
+  burst(e.x,e.y-e.size,'#ffe27a',30,160);announce('STAGGERED! ×1.3');beep(880,.08,'square',.03);setTimeout(()=>beep(1180,.16,'square',.03),60);
+  return true;
+}
+function summonAdds(e,n,share){
+  const level=levelInfo(),pool=level.pool?.length?level.pool:['spider'];
+  for(let i=0;i<n;i++){
+    if(state.enemies.filter(o=>o.hp>0).length>=14)return;
+    const add=spawnEncounterEnemy({kind:pool[(e.sigIndex+i)%pool.length],lane:i});
+    add.x=Math.min(W-8,e.x+20+i*18);add.hp=add.maxHp=Math.round(level.health*share);add.aspect=e.aspect||null;
+    state.waveTotal++;burst(add.x,add.y-add.size,'#c7a2de',8);
+  }
+}
+function unleashSignature(e,kind){
+  const sig=e.sig||'slam';
+  if(sig==='slam'){
+    const received=Math.max(1,Math.round((kind?.power||10)*SLAM_POWER*(e.damageScale||1)*(1-PackCore.reductionFor(state.items))));
+    state.damageTaken+=Math.min(state.hp,received);state.hp=Math.max(0,state.hp-received);
+    state.shake=Math.max(state.shake||0,16);state.flash=Math.max(state.flash||0,.5);
+    burst(W*.27,H*.78-25,'#ff6a4a',40,190);beep(55,.3,'sawtooth',.05);buzz([80,40,160]);
+    state.texts.push({x:W*.27,y:H*.78-70,text:`-${received}`,life:1.3,color:'#ff6a4a',size:Math.round(28*castScale()),pop:true,age:0,vx:0,vy:-90});
+    if(state.hp<=0)finish(false);
+  } else if(sig==='brood'){
+    summonAdds(e,3,.4);announce('BROOD!');beep(140,.2,'triangle',.04);
+  } else if(sig==='mend'){
+    if(e.blight>0){announce('BLIGHTED · NO HEAL');burst(e.x,e.y-e.size,'#8fcf5a',16);}
+    else{const heal=Math.round(e.maxHp*MEND_SHARE);e.hp=Math.min(e.maxHp,e.hp+heal);burst(e.x,e.y-e.size,'#a4e88d',30,120);announce('MENDED');
+      state.texts.push({x:e.x,y:e.y-e.size*2,text:`+${heal}`,life:1.2,color:'#a4e88d',size:Math.round(22*castScale()),pop:true,age:0,vx:0,vy:-80});}
+  }
+  e.sigIndex++;e.sigAt=e.sigClock+e.sigGap;
+}
+function updateBoss(e,kind,dt,slowed){
+  if(e.stun>0){e.stun=Math.max(0,e.stun-dt);return;}
+  if(e.bossPhase<BOSS_PHASES.length&&e.hp<e.maxHp*BOSS_PHASES[e.bossPhase]){
+    e.bossPhase++;e.barrier=(e.barrier||0)+2+e.bossPhase*2;e.sigGap*=.85;
+    summonAdds(e,2,.35);
+    state.shake=Math.max(state.shake||0,12);state.flash=Math.max(state.flash||0,.4);
+    announce(`PHASE ${e.bossPhase+1} · BARRIER`);beep(200,.25,'sawtooth',.04);
+  }
+  if(e.x>W*.95)return;
+  e.sigClock+=dt*slowed;
+  if(e.windup>0){
+    e.windup-=dt*slowed;
+    if(e.windup<=0){e.windup=0;unleashSignature(e,kind);}
+  } else if(e.sigClock>=e.sigAt){
+    e.sig=bossSignature(e);e.windupMax=e.windup=BOSS_WINDUP*(e.enraged?.8:1);e.windupDmg=0;
+    announce(`${SIG_LABEL[e.sig]} INCOMING · BREAK IT`);beep(240,.18,'square',.03);
+  }
+}
 const ASPECTS = ['ember', 'frost', 'storm'];
 const ASPECT_FAVORED = { ember: 'frost', frost: 'storm', storm: 'ember' };
 const ASPECT_COLOR = { ember: '#f97316', frost: '#7dd3fc', storm: '#fde047' };
@@ -99,6 +173,40 @@ function drawAspectPip(e, x, y) {
   ctx.stroke();
   ctx.restore();
 }
+// Boss wind-up, stagger, barrier and blight read at a glance under the HP bar; no on-field tutorials.
+function drawBossTells(e, barY, bw) {
+  if (typeof ctx.beginPath !== 'function') return;
+  const ground = e.y + 5, s = castScale();
+  ctx.save();
+  if (e.windup > 0) {
+    const t = 1 - e.windup / (e.windupMax || 1), pulse = .5 + .5 * Math.sin(time * 22);
+    ctx.strokeStyle = e.sig === 'mend' ? '#a4e88d' : e.sig === 'brood' ? '#c7a2de' : '#ff5a4a';
+    ctx.globalAlpha = .45 + pulse * .45; ctx.lineWidth = 3 + t * 3;
+    ctx.beginPath(); ctx.ellipse(e.x, ground, (40 + t * 50) * s, (9 + t * 8) * s, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+    const by = barY + 9, share = Math.min(1, (e.windupDmg || 0) / staggerNeed(e));
+    ctx.fillStyle = '#141c12dd'; ctx.fillRect(e.x - bw / 2 - 1, by - 1, bw + 2, 7);
+    ctx.fillStyle = '#ffd86b'; ctx.fillRect(e.x - bw / 2, by, bw * share, 5);
+    ctx.fillStyle = '#ff5a4a'; ctx.fillRect(e.x - bw / 2, by + 5, bw * (1 - t), 1.5);
+    ctx.font = `900 ${Math.round(13 * s + 4)}px Manrope,Arial`; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+    ctx.lineWidth = 4; ctx.strokeStyle = '#141c12'; ctx.fillStyle = pulse > .5 ? '#fff1ca' : '#ff8e6e';
+    const label = `! ${SIG_LABEL[e.sig] || 'SMASH'} !`;
+    ctx.strokeText(label, e.x, barY - 8); ctx.fillText(label, e.x, barY - 8);
+  } else if (e.stun > 0) {
+    ctx.strokeStyle = '#ffd86b'; ctx.lineWidth = 2.5; ctx.globalAlpha = .85;
+    ctx.beginPath(); ctx.ellipse(e.x, ground, 46 * s, 11 * s, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#ffd86b'; ctx.globalAlpha = 1;
+    for (let i = 0; i < 3; i++) { const a = time * 6 + i * 2.1; ctx.beginPath(); ctx.arc(e.x + Math.cos(a) * 26 * s, barY - 12 + Math.sin(a) * 5, 3, 0, Math.PI * 2); ctx.fill(); }
+    ctx.font = `900 ${Math.round(11 * s + 4)}px Manrope,Arial`; ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.strokeStyle = '#141c12';
+    ctx.strokeText('STAGGERED ×1.3', e.x, barY - 20); ctx.fillText('STAGGERED ×1.3', e.x, barY - 20);
+  }
+  if (e.barrier > 0) {
+    ctx.font = `800 ${Math.round(9 * s + 3)}px Manrope,Arial`; ctx.textAlign = 'left'; ctx.lineWidth = 3; ctx.strokeStyle = '#141c12'; ctx.fillStyle = '#a6ecff';
+    const txt = `◈${e.barrier}`; ctx.strokeText(txt, e.x + bw / 2 + 4, barY + 6); ctx.fillText(txt, e.x + bw / 2 + 4, barY + 6);
+  }
+  if (e.blight > 0) { ctx.fillStyle = '#8fcf5a'; ctx.beginPath(); ctx.arc(e.x - bw / 2 - 7, barY + 3, 3.5, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+}
 const extraEnemies = assetImage('enemies-v4.png');
 const spearThrust = assetImage('spear-thrust-v2.png');
 const enemyAtlas = assetImage('enemies-v3.png');
@@ -131,6 +239,7 @@ function startEncounter() {
     e.damageScale=level.damageScale;
     e.speed*=kind?.speed||1;e.baseY=e.y;e.age=i*.31;
     e.attack = .5;
+    if(boss)armBoss(e);
     assignEnemyAspect(e, i);
   }
   state.heldId ||= state.items[0].id;
@@ -155,7 +264,9 @@ function encounterHpMul(){
   // Random loot builds wide bags (one ready weapon per cooldown), and rarity/size edges make a maxed
   // epic+ bag ~30% stronger still, hence the higher ceiling.
   if(ratio<=1.6)return 1;
-  return Math.min(1.7,1+(ratio-1.6)*.2);
+  // Early carried bags run 5–9× their tiny kits and made levels 7–20 damage-free under the late ×1.7 cap.
+  const early=(state.stageIndex||0)<30;
+  return Math.min(early?2.2:1.7,1+(ratio-1.6)*(early?.25:.2));
 }
 function spawnEncounterEnemy(entry,level=levelInfo()){
   spawnEnemy(!!entry.boss);const e=state.enemies.at(-1),kind=ENEMY_KINDS[entry.kind];
@@ -165,6 +276,7 @@ function spawnEncounterEnemy(entry,level=levelInfo()){
   const mul=encounterHpMul();
   e.hp=e.maxHp=Math.round((entry.boss?level.bossHealth:Math.round(level.health*(kind?.hp||1)*(entry.elite?1.35:1)))*mul);
   e.baseY=e.y;e.speed=W*.105*(entry.boss?.8:1)*(entry.boss?Math.max(.9,kind?.speed||1):(kind?.speed||1))*level.speedScale;
+  if(entry.boss)armBoss(e);
   assignEnemyAspect(e, entry.lane || 0);
   return e;
 }
@@ -197,6 +309,18 @@ function attackChoices(){
   for(const item of state.items)if(!TYPES[item.type].gear&&(!best.has(item.type)||best.get(item.type).level<item.level))best.set(item.type,item);
   return [...best.values()];
 }
+// Roles that answer what is on screen right now; `urgent` is a live boss wind-up.
+function roleCounters(){
+  const live=state.enemies.filter(e=>e.hp>0&&e.x<W-5),on=new Set(),urgent=new Set();
+  if(state.phase!=='combat'||!live.length)return {on,urgent};
+  const has=test=>live.some(e=>test(e,ENEMY_KINDS[e.kind]||{}));
+  if(has(e=>e.windup>0)){urgent.add('burst');urgent.add('pull');}
+  if(has(e=>e.barrier>0))on.add('pierce');
+  if(has((e,k)=>k.healer||k.regen||(e.windup>0&&e.sig==='mend')))on.add('dot');
+  if(has((e,k)=>(k.armor||1)<1))on.add('burst');
+  if(live.length>=5){on.add('nova');on.add('chain');}
+  return {on,urgent};
+}
 function runUpgrades(){return typeof progress!=='undefined'?progress.upgrades:PackCore.defaultUpgrades();}
 function attackManaCost(item){return PackCore.manaCost(item,runUpgrades());}
 function attackDamage(item){
@@ -223,7 +347,7 @@ function leaveChest(){
 const CHAIN_FALLOFF=[1.25,.9,.8,.7,.6,.5];
 const DOT_BONUS=1.1,PULL_DAMAGE=.85,PULL_REACH=1.8,PULL_STRENGTH=.35,PULL_SLOW=1.2;
 function strike(enemy,dmg,color,src){
-  hit(enemy,(enemy.elite||enemy.boss)&&src?.eliteMul?dmg*src.eliteMul:dmg,color,src?.aspect);
+  hit(enemy,(enemy.elite||enemy.boss)&&src?.eliteMul?dmg*src.eliteMul:dmg,color,src?.aspect,src?.srcRole);
 }
 function attackProfile(type) {
   return (typeof PackAttackFx !== 'undefined' && PackAttackFx.resolve)
@@ -345,8 +469,9 @@ function weaponAttack(item) {
     if (profile.impact === 'vortex' && level===4) state.effects.push({kind:'vortex',x:target.x,level,age:0,life:1.1,nextTick:.25,remaining:3,damage:Math.round(dmg*.25),radius:95,aspect:d.aspect});
     beep(profile.impact==='slash'?420:260,.06,'triangle',.018);
   }
-  for (const fx of state.effects.slice(fxFrom)) fx.eliteMul = eliteMul;
-  for (const p of state.projectiles.slice(shotFrom)) p.eliteMul = eliteMul;
+  // srcRole, not role: `fx.role` already picks the tick behavior of ground effects.
+  for (const fx of state.effects.slice(fxFrom)) { fx.eliteMul = eliteMul; fx.srcRole = d.role; }
+  for (const p of state.projectiles.slice(shotFrom)) { p.eliteMul = eliteMul; p.srcRole = d.role; }
   return true;
 }
 function updateEffects(dt, combat) {
@@ -404,11 +529,11 @@ function impact(p, enemy) {
     if(kind==='bomb') {
       const radius=35+p.level*23;
       state.enemies.filter(e=>e!==enemy&&e.hp>0&&Math.abs(e.x-enemy.x)<radius).forEach(e=>strike(e,Math.round(p.damage*.45),p.color,p));
-      if(p.level>=3)state.effects.push({kind:'afterburn',x:enemy.x,y:null,level:p.level,age:0,life:.9,nextTick:.4,remaining:p.level===4?2:1,damage:Math.round(p.damage*.22),radius,aspect:p.aspect});
+      if(p.level>=3)state.effects.push({kind:'afterburn',x:enemy.x,y:null,level:p.level,age:0,life:.9,nextTick:.4,remaining:p.level===4?2:1,damage:Math.round(p.damage*.22),radius,aspect:p.aspect,srcRole:p.srcRole});
     }
     if(kind==='bow'&&p.level===4&&!p.phase&&!p.bloomTriggered){
       p.bloomTriggered=true;
-      state.effects.push({kind:'bowBloom',x:enemy.x,y:enemy.y-enemy.size,level:4,age:0,life:.9,nextTick:.25,remaining:2,damage:Math.round(p.damage*.25),radius:75,aspect:p.aspect});
+      state.effects.push({kind:'bowBloom',x:enemy.x,y:enemy.y-enemy.size,level:4,age:0,life:.9,nextTick:.25,remaining:2,damage:Math.round(p.damage*.25),radius:75,aspect:p.aspect,srcRole:p.srcRole});
     }
     if((kind==='spear'||p.pierce)&&p.level>=3&&p.hitIds.size===1)state.enemies.filter(e=>e!==enemy&&e.hp>0&&Math.abs(e.x-enemy.x)<60).forEach(e=>strike(e,Math.round(p.damage*.3),p.color,p));
   }
@@ -425,7 +550,8 @@ function updateCombat(dt) {
   state.encounterTime=(state.encounterTime||0)+dt;spawnScheduledEnemies();
   const stats=PackCore.upgradeStats(runUpgrades());
   state.maxMana=stats.maxMana;
-  state.mana=Math.min(state.maxMana,(state.mana||0)+stats.manaRegen*dt);
+  state.focus=(state.encounterTime-(state.lastAttackAt||0))>=FOCUS_DELAY;
+  state.mana=Math.min(state.maxMana,(state.mana||0)+stats.manaRegen*(state.focus?FOCUS_MUL:1)*dt);
   if(state.combo?.count){state.combo.timer-=dt;if(state.combo.timer<=0)state.combo.count=0;}
   for(const item of state.items) {
     state.cooldowns[item.id]=(state.cooldowns[item.id]||0)-dt;
@@ -440,12 +566,15 @@ function updateCombat(dt) {
     if(kind?.rage&&e.hp<e.maxHp*.5&&!e.enraged){e.enraged=true;e.speed*=1.2;e.damageScale*=1.15;burst(e.x,e.y-e.size,'#ff985e',15);}
     const aura=state.enemies.reduce((speed,other)=>other!==e&&other.hp>0&&Math.abs(other.x-e.x)<W*.22?Math.max(speed,ENEMY_KINDS[other.kind]?.aura||1):speed,1);
     const slowed=e.slow>0?.45:1;e.slow=Math.max(0,(e.slow||0)-dt);
-    e.x-=e.speed*dt*aura*slowed*(kind?.charge&&e.age%3<.55?2.2:1); e.hit=Math.max(0,e.hit-dt); e.attack-=dt*slowed;
+    e.blight=Math.max(0,(e.blight||0)-dt);
+    e.hit=Math.max(0,e.hit-dt);
+    if(e.boss){updateBoss(e,kind,dt,slowed);if(state.mode!=='running')return;if(e.stun>0)continue;}
+    e.x-=e.speed*dt*aura*slowed*(kind?.charge&&e.age%3<.55?2.2:1); e.attack-=dt*slowed;
     if(kind?.flying)e.y=(e.baseY??H*.78)-12+Math.sin(e.age*5)*9;
-    if(kind?.regen)e.hp=Math.min(e.maxHp,e.hp+kind.regen*dt);
+    if(kind?.regen&&!(e.blight>0))e.hp=Math.min(e.maxHp,e.hp+kind.regen*dt);
     if(kind?.healer&&e.age>=(e.nextHeal||4)){
       e.nextHeal=e.age+4;
-      for(const ally of state.enemies)if(ally!==e&&ally.hp>0&&Math.abs(ally.x-e.x)<W*.24){ally.hp=Math.min(ally.maxHp,ally.hp+ally.maxHp*.03);burst(ally.x,ally.y-ally.size,'#a4e88d',4);}
+      if(!(e.blight>0))for(const ally of state.enemies)if(ally!==e&&ally.hp>0&&!(ally.blight>0)&&Math.abs(ally.x-e.x)<W*.24){ally.hp=Math.min(ally.maxHp,ally.hp+ally.maxHp*.03);burst(ally.x,ally.y-ally.size,'#a4e88d',4);}
     }
     if(kind?.summon&&e.age>=(e.nextSummon||5)&&state.enemies.length<10){
       e.nextSummon=e.age+7;

@@ -20,7 +20,10 @@
 .drop-footprint{position:absolute;z-index:6;pointer-events:none;box-sizing:border-box;border:2px solid #ccf68c;border-radius:8px;background:#b5f37533;box-shadow:0 0 14px #b5ef7944}
 .drop-footprint.invalid{border-color:#ff927b;background:#f46e5d44;box-shadow:none}.drag-ghost.merge-target,.drop-footprint.merge-target{border-color:#ffe199;background:#e5b84355;color:#fff0b8}
 
-[hidden]{display:none!important}.combat-controls{padding:8px;border-top:1px solid var(--line);flex-shrink:0}.attack-bar{display:flex;gap:7px;overflow-x:auto;min-height:62px;scrollbar-width:thin}.attack-button{position:relative;isolation:isolate;overflow:hidden;flex:0 0 62px;height:62px;border:2px solid #c2ac6d;border-radius:12px;background:#485536;color:#fff2c9;box-shadow:inset 0 2px #ffffff22;touch-action:manipulation}.attack-button .sprite-icon{width:44px;height:44px}.attack-button:disabled{opacity:.7}.attack-button:before{content:"";position:absolute;inset:auto 0 0;height:var(--cooldown,0%);background:#10190ed9;z-index:1;pointer-events:none}.attack-button:not(:disabled):active{transform:scale(.94);background:#74814b}.attack-level{position:absolute;right:5px;top:2px;font-size:10px}.attack-timer{position:absolute;inset:0;display:grid;place-items:center;z-index:2;font-size:19px;font-weight:800;text-shadow:0 2px #000}.attack-button:not(:disabled){box-shadow:inset 0 0 0 1px #f3dfa966,0 0 9px #ead49522}
+[hidden]{display:none!important}.combat-controls{padding:8px;border-top:1px solid var(--line);flex-shrink:0}
+.attack-bar{display:flex;gap:7px;overflow-x:auto;min-height:62px;scrollbar-width:thin;align-items:center}
+.attack-button{position:relative;isolation:isolate;overflow:hidden;flex:0 0 62px;width:62px;height:62px;border:2px solid #c2ac6d;border-radius:12px;background:#485536;color:#fff2c9;box-shadow:inset 0 2px #ffffff22;touch-action:manipulation;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.attack-button .sprite-icon{width:44px;height:44px;display:block;flex-shrink:0}.attack-button:disabled{opacity:.7}.attack-button:before{content:"";position:absolute;inset:auto 0 0;height:var(--cooldown,0%);background:#10190ed9;z-index:1;pointer-events:none}.attack-button:not(:disabled):active{transform:scale(.94);background:#74814b}.attack-level{position:absolute;right:5px;top:2px;font-size:10px}.attack-timer{position:absolute;inset:0;display:grid;place-items:center;z-index:2;font-size:19px;font-weight:800;text-shadow:0 2px #000}.attack-button:not(:disabled){box-shadow:inset 0 0 0 1px #f3dfa966,0 0 9px #ead49522}
 
 .inventory{max-width:calc(300px * var(--bag-scale,1))}@media(max-width:700px){.inventory{width:min(100%,calc(270px * var(--bag-scale,1)),calc((100dvh - 436px) * var(--bag-scale,1)));min-width:150px}}
 
@@ -300,7 +303,8 @@
     min-height: 0;
     gap: 0;
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) auto calc(80px + env(safe-area-inset-bottom));
+    /* Fight shares space; bag is the thumb playground; hands stay fixed. */
+    grid-template-rows: minmax(160px, 1fr) auto calc(78px + env(safe-area-inset-bottom));
     grid-template-areas: "fight" "bag" "hands";
   }
   .run-panel { display: contents; }
@@ -328,7 +332,9 @@
     font-size: 14px;
   }
   .stage-hud {
-    inset: auto 12px 10px 12px;
+    /* Bars live under the wave row, not mid-frog. */
+    inset: calc(max(8px, env(safe-area-inset-top)) + 36px) auto auto 12px;
+    width: auto;
   }
   .health b, .mana b { display: none; }
   .health, .mana {
@@ -340,8 +346,9 @@
   }
   .health > div, .mana > div {
     height: 10px;
-    width: 38vw;
-    min-width: 108px;
+    width: 34vw;
+    min-width: 96px;
+    max-width: 140px;
     border-radius: 99px;
   }
   #encounter-controls {
@@ -349,9 +356,10 @@
     height: 100%;
     min-height: 0;
     max-height: none;
-    padding: 6px 10px max(10px, env(safe-area-inset-bottom));
+    padding: 6px 8px max(8px, env(safe-area-inset-bottom));
     background: #171e15;
     box-sizing: border-box;
+    overflow: hidden;
   }
   #encounter-controls .combat-controls,
   #encounter-controls .loot-panel {
@@ -362,42 +370,66 @@
   .attack-bar {
     height: 100%;
     min-height: 0;
-    gap: 8px;
-    align-items: stretch;
-    padding-bottom: 2px;
+    gap: 5px;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0;
   }
   .attack-bar .attack-button {
+    /* Every weapon stays on screen. Squares share the row and shrink together. */
     flex: 1 1 0;
-    width: auto;
+    width: 0;
+    max-width: 68px;
+    aspect-ratio: 1;
     height: auto;
-    max-width: none;
-    min-height: 64px;
-    border-radius: 16px;
+    min-width: 0;
+    min-height: 0;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 18%;
+    padding: 0;
   }
-  .attack-bar .attack-button .sprite-icon { width: 52px; height: 52px; }
+  .attack-bar .attack-button .sprite-icon {
+    width: 72%;
+    height: 72%;
+    display: block;
+    flex-shrink: 0;
+  }
   .attack-timer, .attack-mana { display: none; }
-  .attack-level { font-size: 12px; font-weight: 800; }
+  .attack-level { font-size: 11px; font-weight: 800; }
   #encounter-controls .loot-card b,
   #encounter-controls .loot-card small,
   #encounter-controls .loot-card .tier { display: none; }
+  #encounter-controls .loot-tray {
+    gap: 6px;
+    align-items: stretch;
+  }
   #encounter-controls .loot-card {
     justify-content: center;
     padding: 4px;
-    border-radius: 16px;
+    border-radius: 14px;
+    min-width: 0;
   }
   #encounter-controls .loot-card .sprite-icon {
-    width: 64px !important;
-    height: 64px !important;
+    width: 44px !important;
+    height: 44px !important;
   }
   .inventory-panel {
     grid-area: bag;
     position: relative;
-    padding: 2px 10px 6px;
+    padding: 4px 12px 6px;
     gap: 4px;
     justify-content: flex-start;
     background: #1c2618;
+    min-height: 0;
+    /* Bag is the main thumb surface — give it real room. */
+    max-height: 52dvh;
+    overflow: visible;
   }
-  .inventory-header { height: 28px; }
+  .inventory-header { height: 40px; flex-shrink: 0; }
   .inventory-header h2 { font-size: 0; margin: 0; }
   .inventory-header h2 span {
     font-size: 15px;
@@ -408,34 +440,60 @@
   .item-detail, #loot-help, .hint, .pact-badge { display: none !important; }
   .inventory-actions {
     position: absolute;
-    top: 4px;
-    right: 10px;
+    top: 0;
+    right: 8px;
     height: auto;
     z-index: 2;
-    gap: 8px;
-  }
-  .inventory-actions .icon-button {
-    width: 44px;
-    height: 44px;
-    min-height: 44px;
-    border-radius: 14px;
-  }
-  .bag-area {
-    flex: 0 0 auto;
-    min-height: 0;
-    display: flex;
-    justify-content: center;
-  }
-  #game-layout .inventory {
-    width: min(100%, 34dvh);
-    max-width: 100%;
-    min-width: 0;
-    height: auto;
     gap: 6px;
   }
+  .inventory-actions .icon-button {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 12px;
+  }
+  .bag-area {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 100%;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+  }
+  #game-layout .inventory {
+    /* Big readable square; still always above the weapon row. */
+    --bag-side: min(94vw, 48dvh, calc(100dvh - 300px), 320px);
+    --bag-gap: clamp(3px, calc(28px / var(--bag-cells, 5)), 6px);
+    width: var(--bag-side);
+    height: var(--bag-side);
+    max-width: 100%;
+    max-height: 100%;
+    min-width: 0;
+    aspect-ratio: 1;
+    gap: var(--bag-gap);
+  }
   .cell { font-size: 0; border-radius: 10px; }
-  .inv-item { border-radius: 12px; }
-  .inv-item .tier { font-size: 11px; }
+  .inv-item {
+    border-radius: 12px;
+    padding: 3px;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .inv-item .sprite-icon {
+    width: 86%;
+    height: 86%;
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+  }
+  .inv-item .tier { font-size: 10px; left: 3px; bottom: 2px; }
+  /* Soft seams — thick rarity borders already mark contacts. */
+  .seam { opacity: .45; box-shadow: none; }
+  .seam.pact { opacity: .7; }
   .bottom-actions { flex-shrink: 0; }
   #continue {
     min-height: 56px;
@@ -519,13 +577,7 @@
   }
   .drag-ghost { z-index: 40; }
   .drop-footprint { z-index: 7; }
-  #game-layout .inventory {
-    width: min(100%, 30dvh, 280px);
-  }
-  .stage-hud {
-    inset: auto 12px max(8px, 2%) 12px;
-    z-index: 4;
-  }
+  .stage-hud { z-index: 4; }
   .overlay.is-menu {
     background:
       linear-gradient(#10180ee8 0%, #10180e33 16%, #10180e10 46%, #10180ef2 62%, #10180ef6 100%);
@@ -628,27 +680,44 @@ canvas{touch-action:none}
 @keyframes rotate-hint{0%,30%{transform:rotate(90deg)}60%,100%{transform:rotate(0)}}
 
 @media (max-width:700px){
-  /* Cells stay finger-sized (~46px) on 6x6 and 7x7 bags; the fight view gives up height instead. */
   #game-layout .inventory{
-    --bag-gap:clamp(3px,calc(30px / var(--bag-cells,5)),6px);
     gap:var(--bag-gap);
-    width:min(100%,max(min(30dvh,280px),calc(var(--bag-cells,5) * 46px + (var(--bag-cells,5) - 1) * var(--bag-gap)),calc(100dvh - 560px)),calc(100dvh - 336px));
   }
   .level-cards{overscroll-behavior:contain}
-  /* Rotate/discard live in the header row so they never cover the top-right cells. */
-  .inventory-header{height:44px}
-  .inventory-actions{top:2px}
-  /* GO floats over the fight view: it must not resize the canvas when loot opens,
-     and must sit away from the loot tray so a missed drag can't skip the finds. */
-  .inventory-panel{overflow:visible}
-  .bottom-actions{position:absolute;right:12px;bottom:calc(100% + 12px);z-index:6;pointer-events:none}
-  #continue{pointer-events:auto;width:auto;min-width:148px;min-height:56px;padding:0 28px;box-shadow:inset 0 2px 0 #fff2bc88,0 3px 0 #716337,0 8px 24px #000a;animation:go-in .35s cubic-bezier(.2,1.5,.4,1) backwards}
-  .merge-badge{width:18px;height:18px;line-height:18px;font-size:14px;border-radius:6px}
+  .bottom-actions{position:absolute;right:12px;bottom:calc(100% + 10px);z-index:6;pointer-events:none}
+  #continue{pointer-events:auto;width:auto;min-width:140px;min-height:52px;padding:0 24px;box-shadow:inset 0 2px 0 #fff2bc88,0 3px 0 #716337,0 8px 24px #000a;animation:go-in .35s cubic-bezier(.2,1.5,.4,1) backwards}
+  .merge-badge{width:16px;height:16px;line-height:16px;font-size:12px;border-radius:5px}
 }
 @media (max-width:700px) and (max-height:720px){
-  .stage-hud .bars{gap:4px}
-  .health>div,.mana>div{height:7px;width:30vw;min-width:96px}
+  .stage-hud .bars{gap:3px}
+  .health>div,.mana>div{height:7px;width:28vw;min-width:88px}
   .health>span,.mana>span{font-size:11px}
+  #game-layout .inventory{
+    --bag-side:min(94vw,44dvh,calc(100dvh - 280px),280px);
+  }
 }
 @keyframes go-in{from{opacity:0;transform:translateY(12px) scale(.85)}}
 @media (prefers-reduced-motion:reduce){#continue{animation:none}.rotate-cover-icon{animation:none}}
+
+/* Roles: one color per job, so the attack bar reads as "which tool for what". */
+.attack-button{--role:#c2ac6d}
+.attack-button.role-nova{--role:#ffae76}.attack-button.role-burst{--role:#ff6a6a}.attack-button.role-chain{--role:#8cdeef}
+.attack-button.role-pull{--role:#c7a2de}.attack-button.role-dot{--role:#8fcf5a}.attack-button.role-pierce{--role:#f0e08a}
+.attack-role{position:absolute;right:3px;bottom:2px;z-index:2;font-size:7px;font-weight:900;letter-spacing:.3px;color:var(--role);text-shadow:0 1px #000}
+.attack-button.is-counter{border-color:var(--role);box-shadow:inset 0 0 0 1px var(--role),0 0 10px color-mix(in srgb,var(--role) 45%,transparent)}
+.attack-button.is-urgent{border-color:var(--role)}
+.attack-button.is-urgent:after{content:"";position:absolute;inset:-2px;border-radius:inherit;border:3px solid var(--role);z-index:3;pointer-events:none;animation:urgent-pulse .45s ease-in-out infinite alternate}
+@keyframes urgent-pulse{from{opacity:.25}to{opacity:1}}
+/* Focus: holding fire nearly doubles regen. */
+#mana-fill.focus{background:linear-gradient(90deg,#9fe0ff,#f1fbff);box-shadow:0 0 8px #b7e4ff}
+/* Spare copies neither fire nor apply: only the best one of a type counts. */
+.inv-item.is-spare{filter:grayscale(.85);opacity:.55;border-style:dashed}
+.spare-badge{position:absolute;left:3px;top:3px;font-size:7px;font-weight:900;letter-spacing:.3px;color:#ffb4a0;text-shadow:0 1px 2px #000;pointer-events:none;line-height:1}
+.loot-card.spare{opacity:.62;filter:saturate(.5)}
+.item-stats{display:block;font-size:10px;font-weight:800;color:#d7f0ff;margin-top:2px}
+.role-rule{color:#ffd86b}.spare-rule{color:#ffb4a0}
+@media (max-width:700px){
+  .attack-bar .attack-mana{display:block;font-size:8px;left:3px;bottom:1px}
+  .attack-role{font-size:0;top:2px;bottom:auto;left:30%;right:30%;height:3px;border-radius:2px;background:var(--role)}
+}
+@media (prefers-reduced-motion:reduce){.attack-button.is-urgent:after{animation:none}}

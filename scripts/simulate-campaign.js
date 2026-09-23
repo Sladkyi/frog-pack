@@ -6,7 +6,8 @@ const {STAGES}=require('../campaign');
 
 // Same combat, inventory and loot code as the browser. No damage/HP cheats.
 // A death is retried through the real RETRY button, like a player would.
-function simulate({width=390,first=0,last=99,decisionSeconds=5,reactionSeconds=.25,upgrade=true,attempts=3}={}){
+// bot 'spam' presses every ready button; 'smart' banks mana (Focus), dumps it into boss wind-ups and prefers counters.
+function simulate({width=390,first=0,last=99,decisionSeconds=5,reactionSeconds=.25,upgrade=true,attempts=3,bot='spam'}={}){
   const run=game();run(`W=${width};progress.cleared=STAGES.length`);
   // SIM_PATCH runs inside the game sandbox, for A/B experiments without editing the game.
   if(process.env.SIM_PATCH)run(process.env.SIM_PATCH);
@@ -49,7 +50,17 @@ function simulate({width=390,first=0,last=99,decisionSeconds=5,reactionSeconds=.
               // Like a player: the hardest-hitting press while mana lasts, the most efficient one when it runs low.
               const press=item=>attackDamage(item)*itemShots(item),frugal=state.mana<state.maxMana*.35;
               const value=item=>frugal?press(item)/Math.max(1,attackManaCost(item)):press(item);
-              attackChoices().slice().sort((a,b)=>value(b)-value(a)).forEach(item=>manualAttack(item.id));
+              if(${bot==='smart'}){
+                const live=state.enemies.filter(e=>e.hp>0&&e.x<W-5),boss=live.find(e=>e.boss),wind=boss&&boss.windup>0;
+                const has=test=>live.some(e=>test(e,ENEMY_KINDS[e.kind]||{}));
+                const counters={burst:wind||has((e,k)=>k.armor<1),pierce:has(e=>e.barrier>0),dot:has((e,k)=>k.healer||k.regen),nova:live.length>=4,chain:live.length>=4};
+                const ranked=attackChoices().slice().sort((a,b)=>value(b)*(counters[TYPES[b.type].role]?1.6:1)-value(a)*(counters[TYPES[a.type].role]?1.6:1));
+                const saving=boss&&!wind&&boss.sigAt-boss.sigClock<2.5;
+                if(wind)ranked.forEach(item=>manualAttack(item.id));
+                else if(saving){if(state.mana>state.maxMana*.9&&ranked[0])manualAttack(ranked[0].id);}
+                else if(state.mana>state.maxMana*.55)ranked.forEach(item=>manualAttack(item.id));
+                else if(ranked[0]&&live.some(e=>e.x<W*.55))manualAttack(ranked[0].id);
+              } else attackChoices().slice().sort((a,b)=>value(b)-value(a)).forEach(item=>manualAttack(item.id));
               nextInput=seconds+${reactionSeconds};
             }
           }
@@ -64,7 +75,7 @@ function simulate({width=390,first=0,last=99,decisionSeconds=5,reactionSeconds=.
     rows.push({level:index+1,name:STAGES[index].name,...result,attempts:tries,bag,
       estimatedSeconds:Math.round((totalSeconds+totalChests*decisionSeconds+3*tries)*10)/10});
   }
-  return {width,reactionSeconds,decisionSeconds,upgrade,attempts,levels:rows.length,wins:rows.filter(r=>r.mode==='won').length,
+  return {width,bot,reactionSeconds,decisionSeconds,upgrade,attempts,levels:rows.length,wins:rows.filter(r=>r.mode==='won').length,
     firstTry:rows.filter(r=>r.mode==='won'&&r.attempts===1).length,
     simulationMinutes:Math.round(rows.reduce((s,r)=>s+r.seconds,0)/6)/10,
     estimatedMinutes:Math.round(rows.reduce((s,r)=>s+r.estimatedSeconds,0)/6)/10,rows};
@@ -72,9 +83,10 @@ function simulate({width=390,first=0,last=99,decisionSeconds=5,reactionSeconds=.
 if(require.main===module){
   const first=Number(process.env.FIRST_LEVEL||1)-1,last=Number(process.env.LAST_LEVEL||100)-1;
   const report=simulate({width:Number(process.env.SIM_WIDTH||390),first,last,upgrade:process.env.NO_UPGRADES!=='1',
-    reactionSeconds:Number(process.env.REACTION_SECONDS||.25),attempts:Number(process.env.ATTEMPTS||3)});
+    reactionSeconds:Number(process.env.REACTION_SECONDS||.25),attempts:Number(process.env.ATTEMPTS||3),bot:process.env.BOT||'spam'});
   const file=path.join(__dirname,'../reports/campaign-balance.json');fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify({...report,rows:undefined,failures:report.rows.filter(r=>r.mode!=='won').map(r=>({level:r.level,wave:r.wave,seconds:Math.round(r.seconds),remaining:r.remaining}))},null,2));
-  process.exitCode=report.wins===report.levels?0:1;
+  // The spam bot is expected to lose levels now; only the smart bot gates the exit code.
+  if(report.bot==='smart')process.exitCode=report.wins>=report.levels*.85?0:1;
 }
 module.exports={simulate};

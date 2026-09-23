@@ -84,10 +84,10 @@ test('all 601 waves resolve to a loaded background with no ready-screen jump',()
 test('procedural stages stay above late-legacy toughness so level 7 is not a one-shot stroll',()=>{
   const run=game();
   assert.ok(run('LEVELS[5].health')<run('LEVELS[20].health'));
-  assert.ok(run('LEVELS[STAGES[6].firstWave-1].health')>=280);
-  assert.ok(run('LEVELS.filter(l=>l.stageIndex===6).every(l=>l.health>=220)'));
-  // A carried axe 4 should not one-shot stage-7 scouts; kits no longer spawn at 4.
-  assert.ok(run('LEVELS[STAGES[6].firstWave-1].health > PackCore.scaledDamage(PackCore.makeItem("axe",4),PackCore.defaultUpgrades())'));
+  assert.ok(run('LEVELS[STAGES[6].firstWave-1].health')>=200);
+  assert.ok(run('LEVELS.filter(l=>l.stageIndex===6).every(l=>l.health>=200)'));
+  // A whole press of a carried axe 4 (every shot) must not one-shot stage-7 scouts.
+  assert.ok(run('LEVELS[STAGES[6].firstWave-1].health > (()=>{const a=PackCore.makeItem("axe",4);return PackCore.scaledDamage(a,PackCore.defaultUpgrades())*PackCore.shots(a);})()'));
   assert.ok(run('LEVELS[STAGES[6].firstWave-1].health < LEVELS[STAGES[6].firstWave-1].health * 0 + 700'));
 });
 

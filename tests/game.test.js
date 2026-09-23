@@ -165,7 +165,7 @@ test('a kill chain builds a combo, breaks after its window and every eighth kill
  run("hit(spawnEncounterEnemy({kind:'beetle'}),1e7,'#fff')");
  assert.equal(run('state.combo.count'),8);
  assert.equal(run('Object.values(state.cooldowns).every(v=>v===0)'),true);
- assert.equal(run('state.mana'),run('Math.min(state.maxMana,10+FRENZY_MANA+12)'));
+ assert.equal(run('state.mana'),run('Math.min(state.maxMana,10+FRENZY_MANA+KILL_MANA)'));
  run('state.enemies=[spawnEncounterEnemy({kind:"beetle"})];state.enemies[0].x=W*.9;state.enemies[0].speed=0;updateCombat(COMBO_WINDOW+.01)');
  assert.equal(run('state.combo.count'),0);
 });

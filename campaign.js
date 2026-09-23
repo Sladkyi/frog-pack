@@ -12,11 +12,19 @@ const LEGACY_STAGES=[
 const EXTRA_BOSSES={4:'spiderQueen',10:'swampLord',17:'crystalGolem'};
 const ENEMY_UNLOCKS={2:['beetle'],3:['mushroom','boar'],4:['spider'],5:['toad'],8:['moth'],9:['stump'],11:['bat'],12:['mandrake'],15:['snail'],16:['scorpion']};
 const BOSS_HEALTH={4:350,7:850,10:1400,14:2200,17:3200,21:4600};
+// HP was authored for the old 1.65^n × n-shot curve; these rescale it to PackCore.LEVEL_POWER.
+// Legacy waves ease linearly (kits go lv1 → lv3) and stay monotonic: each step is far above 1/1.15.
+// Bosses got a larger share: they now telegraph moves, and a fight must outlast several wind-ups.
+const LEGACY_HP_FIRST=1.25,LEGACY_HP_LAST=.66,LEGACY_BOSS=1,PROC_HP=.3,PROC_BOSS=.45;
+const legacyHp=index=>LEGACY_HP_FIRST+(LEGACY_HP_LAST-LEGACY_HP_FIRST)*index/20;
+// Fights last longer now, so trash chips less and the boss's telegraphed SMASH carries the threat.
+const PROC_DMG=.75,EARLY_EASE=.35;
 const LEGACY_WAVES=Array.from({length:21},(_,index)=>{
   const number=index+1,difficultyBand=Math.floor(index/7),boss=number%7===0||!!EXTRA_BOSSES[number];
+  const hpScale=legacyHp(index);
   return {number,boss,bossKind:EXTRA_BOSSES[number]||(number===14?'mushroomKing':number===21?'ancientTree':null),
     count:boss?5+difficultyBand:Math.min(10,3+Math.floor(number/3)),
-    health:Math.round(32*Math.pow(1.15,index)),bossHealth:BOSS_HEALTH[number]||0,
+    health:Math.round(32*Math.pow(1.15,index)*hpScale),bossHealth:Math.round((BOSS_HEALTH[number]||0)*hpScale*LEGACY_BOSS),
     damageScale:1+index*.04,speedScale:1+index*.01,
     elites:number<5?0:number<11?1:number<18?2:3,
     pool:Object.entries(ENEMY_UNLOCKS).filter(([unlock])=>Number(unlock)<=number).flatMap(([,kinds])=>kinds)};
@@ -24,14 +32,14 @@ const LEGACY_WAVES=Array.from({length:21},(_,index)=>{
 const WORLDS=[
   {name:'Forest Paths',hook:'They look cute',biome:0,pool:['beetle','mushroom','boar','spider','toad'],boss:'spiderQueen',tint:null},
   {name:'Under the Roots',hook:'It gets dark',biome:1,pool:['spider','mushroom','stump','broodling'],boss:'broodMother',tint:'#434522'},
-  {name:'Night Flight',hook:'They come from above',biome:2,pool:['moth','bat','boar','windMoth'],boss:'nightWing',tint:'#25244b'},
-  {name:'Shards of Light',hook:'Armor lies',biome:3,pool:['beetle','snail','shardBeetle','scorpion'],boss:'crystalGolem',tint:null,hp:.93},
-  {name:'Ash Trail',hook:'Fire eats fire',biome:4,pool:['boar','scorpion','emberBoar','bat'],boss:'ashLord',tint:null,hp:.9},
-  {name:'White Silence',hook:'Ice does nothing',biome:5,pool:['moth','snail','frostMoth','stump'],boss:'frostWarden',tint:'#80bed0'},
-  {name:'Living Swamp',hook:'They heal',biome:1,pool:['toad','mandrake','healer','mushroom'],boss:'swampLord',tint:'#276b40'},
-  {name:'Royal Swarm',hook:'Too many',biome:2,pool:['broodling','spider','warDrummer','windMoth'],boss:'broodMother',tint:'#77532c'},
+  {name:'Night Flight',hook:'They come from above',biome:2,pool:['moth','bat','boar','windMoth'],boss:'nightWing',tint:'#25244b',hp:.92},
+  {name:'Shards of Light',hook:'Armor lies',biome:3,pool:['beetle','snail','shardBeetle','scorpion'],boss:'crystalGolem',tint:null,hp:.74},
+  {name:'Ash Trail',hook:'Fire eats fire',biome:4,pool:['boar','scorpion','emberBoar','bat'],boss:'ashLord',tint:null,hp:.86},
+  {name:'White Silence',hook:'Ice does nothing',biome:5,pool:['moth','snail','frostMoth','stump'],boss:'frostWarden',tint:'#80bed0',hp:.74},
+  {name:'Living Swamp',hook:'They heal',biome:1,pool:['toad','mandrake','healer','mushroom'],boss:'swampLord',tint:'#276b40',hp:.88},
+  {name:'Royal Swarm',hook:'Too many',biome:2,pool:['broodling','spider','warDrummer','windMoth'],boss:'broodMother',tint:'#77532c',hp:1.12},
   {name:'Eclipse',hook:'Wrong element dies',biome:3,pool:['shardBeetle','emberBoar','healer','frostMoth','warDrummer'],boss:'eclipseKeeper',tint:'#3b205c',hp:.85},
-  {name:'Heart of the World',hook:'You will not',biome:0,pool:['warDrummer','broodling','healer','shardBeetle','emberBoar','windMoth'],boss:'worldHeart',tint:'#665437',hp:.92}
+  {name:'Heart of the World',hook:'You will not',biome:0,pool:['warDrummer','broodling','healer','shardBeetle','emberBoar','windMoth'],boss:'worldHeart',tint:'#665437',hp:.84}
 ];
 const NAMES=[
  ['Twilight Forest','Mushroom Thicket','Ancient Grove','Crystal Rift','Ashen Wastes','Frost Peaks','Overgrown Ford','Boar Path','Old Watch','Dungeon Gate'],
@@ -62,7 +70,8 @@ const ARMS=['axe','bow','spear','wand','blade','storm','bomb','scythe','hammer',
 const SUPPORT=['bow','spear','storm','bomb','wand','blade','dagger','orb','scythe','bow'];
 // Compensates the starter kit's main weapon; storm, orb, dagger and hammer lost their old handicaps.
 const WEAPON_HEALTH={axe:1,bow:.85,spear:1,wand:1.08,blade:.88,storm:1,bomb:1.08,scythe:1,hammer:1.25,orb:1.1,dagger:1,tome:1.05};
-const HP_LATE=6,HP_WORLD=30,BOSS_LATE=30,BOSS_WORLD=100,DMG_LATE=.002,DMG_WORLD=.015;
+// Late growth is gentle: lv4 is now only ~1.45× lv3 and mana caps how many buttons a wide bag can press.
+const HP_LATE=4,HP_WORLD=20,BOSS_LATE=20,BOSS_WORLD=70,DMG_LATE=.0015,DMG_WORLD=.011;
 const STAGES=LEGACY_STAGES.map((s,i)=>({...s,id:i+1,world:0,legacy:true,waveCount:s.lastWave-s.firstWave+1}));
 const LEVELS=LEGACY_WAVES.map(w=>({...w,legacy:true,stageIndex:STAGES.findIndex(s=>w.number>=s.firstWave&&w.number<=s.lastWave)}));
 for(let index=6;index<100;index++){
@@ -93,7 +102,7 @@ for(let index=6;index<100;index++){
     const earlyEase=index<20?(20-index)/20:0;
     // Player DPS is mana-bound and nearly flat, so late growth must stay gentle.
     const late=Math.max(0,index-20),ramp=Math.min(index,20);
-    const health=Math.round((560+ramp*38+late*HP_LATE+slot*10+local*24+worldIndex*HP_WORLD-earlyEase*560)*pattern.hp*WEAPON_HEALTH[main]*(world.hp||1)*(local===0?.9:1));
+    const health=Math.round((560+ramp*38+late*HP_LATE+slot*10+local*24+worldIndex*HP_WORLD-earlyEase*560*EARLY_EASE)*pattern.hp*WEAPON_HEALTH[main]*(world.hp||1)*(local===0?.9:1)*PROC_HP);
     const roster=[...world.pool];
     if(worldIndex>0&&local%2===1)roster.push(WORLDS[worldIndex-1].pool[(slot+local)%WORLDS[worldIndex-1].pool.length]);
     const packs=boss?3:pattern.packs,entries=[];
@@ -107,8 +116,8 @@ for(let index=6;index<100;index++){
       }
     }
     LEVELS.push({number:LEVELS.length+1,stageIndex:index,pattern:pattern.id,boss,bossKind:entries.find(e=>e.boss)?.kind,
-      count:entries.length,health,bossHealth:Math.round((4200+ramp*120+late*BOSS_LATE+worldIndex*BOSS_WORLD+slot*60-earlyEase*1600)*(slot===9?1.14:1)*(index>=30?.85:1)*(index===99?.6:1)*(world.hp||1)*WEAPON_HEALTH[main]),
-      damageScale:1.4+ramp*.02+late*DMG_LATE+worldIndex*DMG_WORLD,speedScale:(.9+worldIndex*.012+index*.002)*(pattern.speed||1),
+      count:entries.length,health,bossHealth:Math.round((4200+ramp*120+late*BOSS_LATE+worldIndex*BOSS_WORLD+slot*60-earlyEase*1600)*(slot===9?1.14:1)*(index>=30?.85:1)*(index===99?.6:1)*(world.hp||1)*WEAPON_HEALTH[main]*PROC_BOSS),
+      damageScale:(1.4+ramp*.02+late*DMG_LATE+worldIndex*DMG_WORLD)*PROC_DMG,speedScale:(.9+worldIndex*.012+index*.002)*(pattern.speed||1),
       elites:entries.filter(e=>e.elite).length,pool:roster,entries});
   }
 }

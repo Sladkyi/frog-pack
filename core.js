@@ -81,13 +81,14 @@
   Object.assign(TYPES, EXTENDED_WEAPONS);
 
   // The attack sheet is the skin, the role is the behavior: two weapons of one role only differ in numbers.
+  // `tag` is the attack-button badge, `counter` the one rule a player must remember.
   const ROLES = {
-    nova: { id: 'nova', name: 'Nova', hint: 'hits the whole pack around the target' },
-    burst: { id: 'burst', name: 'Burst', hint: 'one target, ×1.6 damage, +15% to elites and bosses' },
-    chain: { id: 'chain', name: 'Chain', hint: 'jumps through level+1 foes anywhere in the line' },
-    pull: { id: 'pull', name: 'Vortex', hint: 'drags the pack together and slows it' },
-    dot: { id: 'dot', name: 'Blight', hint: 'lingers twice as long, +30% damage over time' },
-    pierce: { id: 'pierce', name: 'Pierce', hint: 'each shot passes through level+1 foes' }
+    nova: { id: 'nova', name: 'Nova', tag: 'AOE', hint: 'hits the whole pack around the target', counter: 'best vs packs' },
+    burst: { id: 'burst', name: 'Burst', tag: 'BOSS', hint: 'one target, ×1.6 damage, +15% to elites and bosses', counter: 'ignores armor, breaks boss wind-ups twice as fast' },
+    chain: { id: 'chain', name: 'Chain', tag: 'CHAIN', hint: 'jumps through level+2 foes anywhere in the line', counter: 'best vs spread-out lines' },
+    pull: { id: 'pull', name: 'Vortex', tag: 'PULL', hint: 'drags the pack together and slows it', counter: 'slows boss wind-ups and attacks' },
+    dot: { id: 'dot', name: 'Blight', tag: 'DOT', hint: 'lingers twice as long, +10% damage over time', counter: 'blighted foes cannot heal' },
+    pierce: { id: 'pierce', name: 'Pierce', tag: 'PIERCE', hint: 'each shot passes through level+1 foes', counter: 'ignores barriers' }
   };
   const ROLE_MEMBERS = {
     burst: ['abyssal_eye', 'starfall_shard', 'solar_bow', 'glacial_estoc', 'blood_falchion', 'dagger', 'orb', 'hammer'],
@@ -105,6 +106,12 @@
   // Both edges are centred on 1 so the campaign curve keeps its difficulty. SIZE_EDGE is indexed by cells.
   // Mana is priced by the size of one hit; 2.6 is the old hand-set average damage per mana.
   const MANA_EFF = 2.6;
+  // Whole-press output per level. The old 1.65^n per shot × n shots made a lv4 hit 18× a lv1 hit
+  // (from 8 merged pieces) and one-tapped every pack. Per-shot damage still rises every level.
+  // lv4/lv3 must clear 1.475 after rounding: an isolated merged piece (×0.8) has to outhit two touching copies (×1.18).
+  const LEVEL_POWER = [1, 2.2, 3.5, 5.3];
+  // Mana grows almost as fast as damage: a lv4 press is slightly more efficient but cannot be spammed.
+  const MANA_LEVEL = [1, 1.3, 1.6, 2];
   const SIZE_EDGE = [.92, .92, 1, 1.07, 1.12];
   const edgeOf = def => (RARITIES[def.rarity] || RARITIES.common).mul * SIZE_EDGE[Math.min(4, def.w * def.h)];
   for (const def of Object.values(TYPES)) def.manaCost = def.gear ? 0 : Math.max(1, Math.round(2 * def.damage / MANA_EFF) / 2);
@@ -287,7 +294,8 @@
   const damage = item => {
     const def = TYPES[item.type];
     if (!def) return 10;
-    return Math.round(def.damage * Math.pow(1.65, item.level - 1) * edgeOf(def));
+    const level = Math.max(1, Math.min(4, item.level || 1));
+    return Math.round(def.damage * LEVEL_POWER[level - 1] / level * edgeOf(def));
   };
 
   const shots = (item, items) => {
@@ -302,7 +310,8 @@
     const def = TYPES[item.type];
     if (!def || def.gear) return 0;
     // Half-mana steps: whole numbers erased the rare→epic efficiency gap on small costs.
-    return Math.max(1, Math.round(2 * def.manaCost * upgradeStats(upgrades).manaDiscount) / 2);
+    const level = Math.max(1, Math.min(4, item.level || 1));
+    return Math.max(1, Math.round(2 * def.manaCost * MANA_LEVEL[level - 1] * upgradeStats(upgrades).manaDiscount) / 2);
   };
 
   const scaledDamage = (item, upgrades) => Math.round(damage(item) * upgradeStats(upgrades).damageMul);
@@ -330,6 +339,8 @@
     ROLES,
     BURST_MUL,
     BURST_ELITE,
+    LEVEL_POWER,
+    MANA_LEVEL,
     equipment,
     TYPES,
     UPGRADE_DEFS,

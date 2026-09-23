@@ -159,7 +159,8 @@ function chestRewardColor(){return (PackCore.RARITIES[TYPES[state.chestReward?.t
 function updateChestSuspense(prev,age){
  const rank=chestRewardRank();
  if(rank>=2){
-  for(let t=CHEST_ENTER+.08,gap=.2-rank*.015;t<CHEST_REVEAL-.03;t+=gap,gap*=.78){
+  // The gap floor keeps the loop finite: .78 decay alone converges short of the reveal for mythics.
+  for(let t=CHEST_ENTER+.08,gap=.2-rank*.015;t<CHEST_REVEAL-.03;t+=gap,gap=Math.max(.03,gap*.78)){
    if(prev<t&&age>=t)beep(560+rank*50+t*260,.03,'square',.012);
   }
  }
